@@ -114,6 +114,25 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                             const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
                             const resolved = { name: realName, avatarUrl: realAvatar || avatar };
                             fbNameResolutionCache.set(psid, resolved);
+                            fbNameResolutionCache.set(`fb_${psid}`, resolved);
+
+                            if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+                                const threadMap = window.getCachedCustomerThreadsMap();
+                                if (threadMap) {
+                                    for (const thread of threadMap.values()) {
+                                        const tId = String(thread.custId || thread.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim();
+                                        if (tId && tId === psid) {
+                                            thread.customerName = realName;
+                                            thread.name = realName;
+                                            if (realAvatar) thread.avatarUrl = realAvatar;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (typeof window !== 'undefined' && typeof window.reconcileCustomerThreadsWithRoster === 'function') {
+                                window.reconcileCustomerThreadsWithRoster();
+                            }
 
                             // Update database in the background
                             if (db) {

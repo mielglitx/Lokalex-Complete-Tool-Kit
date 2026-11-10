@@ -95,7 +95,12 @@ export function renderClassicLockedChatModal(custId, custName, avatarUrl) {
                 </div>
                 Messages and receipt photos are not downloaded while locked to save your mobile data.
             </div>
-            <button type="button" onclick="window.unlockCateringChatRoom('${escapeHtml(custId)}', '${escapeHtml(custName || '')}', '${escapeHtml(avatarUrl || '')}')" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 active:scale-95 transition flex items-center gap-2 cursor-pointer">
+            <button type="button" 
+                data-cust-id="${escapeHtml(custId)}" 
+                data-customer-name="${escapeHtml(custName || '')}" 
+                data-avatar-url="${escapeHtml(avatarUrl || '')}" 
+                onclick="window.handleModernUnlockClick ? window.handleModernUnlockClick(this) : (window.unlockCateringChatRoom && window.unlockCateringChatRoom(this.getAttribute('data-cust-id'), this.getAttribute('data-customer-name'), this.getAttribute('data-avatar-url')))" 
+                class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 active:scale-95 transition flex items-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-lock-open text-xs"></i>
                 <span>Unlock & Load Chat</span>
             </button>
@@ -669,7 +674,9 @@ export function renderRiderCateredSwitcher() {
 
         return `
             <button type="button" 
-                onclick="window.switchCateredCustomerChat('${escapedId}', '${escapedName}')"
+                data-cust-id="${escapedId}" 
+                data-cust-name="${escapedName}"
+                onclick="window.handleSwitchCateredChatClick ? window.handleSwitchCateredChatClick(this) : (window.switchCateredCustomerChat && window.switchCateredCustomerChat(this.getAttribute('data-cust-id'), this.getAttribute('data-cust-name')))"
                 class="relative px-3 py-1 rounded-full text-xs transition active:scale-95 flex items-center gap-1.5 shrink-0 ${activeClasses} cursor-pointer">
                 <i class="fa-solid fa-user text-[10px] ${isCurrentActive ? 'text-white' : 'text-gray-400'}"></i>
                 <span class="max-w-[120px] truncate">${escapedName}</span>
@@ -688,6 +695,13 @@ export function switchCateredCustomerChat(targetCustId, targetCustName) {
     if (!targetCustId && !targetCustName) return;
     openRiderCustomerChatModal(targetCustId, targetCustName);
     renderRiderCateredSwitcher();
+}
+
+export function handleSwitchCateredChatClick(btn) {
+    if (!btn) return;
+    const cid = btn.getAttribute('data-cust-id');
+    const cname = btn.getAttribute('data-cust-name');
+    switchCateredCustomerChat(cid, cname);
 }
 
 export function evaluateRiderChatLockPermissions() {
@@ -751,8 +765,8 @@ export function evaluateRiderChatLockPermissions() {
         cateredRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
         cateredRiderName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim();
     } else {
-        cateredRiderId = metaRiderId;
-        cateredRiderName = metaRiderName;
+        cateredRiderId = "";
+        cateredRiderName = "";
     }
 
     const cleanCateredRiderName = cateredRiderName.toLowerCase();
@@ -764,29 +778,11 @@ export function evaluateRiderChatLockPermissions() {
         const aName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim().toLowerCase();
         isCateringRider = (myId && aId && myId === aId) || (myName && aName && (myName === aName || isRiderMatch(myName, aName, myId, aId)));
     } else {
-        const isMine = (typeof isMyCustomerThread === 'function')
-            ? isMyCustomerThread(currentRiderChatMeta)
-            : false;
-        const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
-        const isCustomerInMyList = myCateringCusts.some(c => {
-            const cleanC = c.toLowerCase().trim();
-            return cleanC === custDisplayName.toLowerCase() || 
-                   cleanC === (activeRiderChatCustId || '').toLowerCase() || 
-                   (typeof isCustomerMatch === 'function' && isCustomerMatch(cleanC, custDisplayName));
-        });
-        isCateringRider = Boolean(
-            isMine ||
-            isMatchMyRider(cateredRiderId, cateredRiderName) ||
-            isCustomerInMyList ||
-            isMatchMyRider(metaRiderId, metaRiderName)
-        );
+        isCateringRider = false;
     }
 
-    const isCateringFolder = Boolean(activeCaterer) || ((currentRiderChatMeta.folder || '').toLowerCase() === 'catering');
-    const isThreadCatered = isCateringRider ||
-                            isCateringFolder ||
-                            Boolean(activeCaterer) ||
-                            Boolean(cateredRiderId || cleanCateredRiderName);
+    const isCateringFolder = Boolean(activeCaterer);
+    const isThreadCatered = Boolean(activeCaterer);
     const isLocked = isThreadCatered && !isCateringRider && !isUserAdmin;
 
     // If I am catering this customer, ensure local meta has catering folder synced
@@ -934,6 +930,19 @@ export function closeRiderCustomerChatModal() {
     setHasMoreRiderMsgs(true);
     setIsLoadingRiderHistory(false);
     loadedRiderMsgsMap.clear();
+
+    const msgContainer = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+    if (msgContainer) {
+        msgContainer.innerHTML = '';
+    }
+    const presenceBanner = document.getElementById('rider-chat-presence-banner');
+    if (presenceBanner) { presenceBanner.classList.add('hidden'); presenceBanner.innerHTML = ''; }
+    const lockBanner = document.getElementById('rider-chat-lock-banner');
+    if (lockBanner) { lockBanner.classList.add('hidden'); lockBanner.innerHTML = ''; }
+    const milestoneBar = document.getElementById('rider-chat-milestone-bar');
+    if (milestoneBar) { milestoneBar.classList.add('hidden'); }
+    const quickDrawer = document.getElementById('quick-replies-drawer');
+    if (quickDrawer) { quickDrawer.classList.add('hidden'); }
     cancelRiderReply();
 
     if (typeof window !== 'undefined' && typeof window.renderRiderCustomerChatFeed === 'function') {
@@ -1010,4 +1019,10 @@ export async function promptRenameCustomerChat() {
         window.renderRiderCustomerChatFeed();
     }
 }
+
+if (typeof window !== 'undefined') {
+    window.switchCateredCustomerChat = switchCateredCustomerChat;
+    window.handleSwitchCateredChatClick = handleSwitchCateredChatClick;
+}
+
 

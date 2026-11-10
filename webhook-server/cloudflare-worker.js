@@ -22,7 +22,7 @@
 const CONFIG = {
   // Supabase Project REST URL & Service Role / Secret Key (or Anon Key)
   SUPABASE_URL: "https://brdvugzjhkimcyabptcw.supabase.co",
-  SUPABASE_KEY: "", // Set via Cloudflare Worker Dashboard -> Settings -> Variables -> SUPABASE_KEY
+  SUPABASE_KEY: "sb_publishable_7wn7gV5RvuKWE2kGLRmaTQ_fgIC579K",
 
   // The Verify Token you entered in Lokalex Admin Settings & Meta Dashboard
   VERIFY_TOKEN: "Test1234",
@@ -33,7 +33,7 @@ const CONFIG = {
 
   // (Optional) Facebook Page Access Token
   // Can be left empty; worker automatically loads it directly from Supabase admin_settings table!
-  PAGE_ACCESS_TOKEN: "",
+  PAGE_ACCESS_TOKEN: "EAAccueEMns0BS8N0e78ceGghMWTGZBoR8pEv8vKrrEqRlwv5E5T2mCMlZBw7IU88ZCzR0iZAWcWJfPZBIqVhgBJrlZA8oacS9QPWf08EZA9W3zBfhWgZCHPZBbiMjiJ1gWZAwJCpLmhfE7eBfZAZBqezBkzLQADewZBoQNWQRK2jeT7ihsdCNBjWYkhskKvXjf9rPVgHQdZAh4jVv7Mcl6RZBDZBTl2hUQZDZD",
 
   // (Optional) Forward raw incoming webhooks to the existing Firebase worker so existing riders never miss a message:
   FIREBASE_FORWARD_URL: ""
@@ -1282,10 +1282,10 @@ async function processMetaEntries(entries, cfg, ctx) {
       }
 
       // 4. Thread Metadata Payload
-      const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
+      const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done' || Boolean(existingCustomerMeta?.completedAt);
       
-      // An echo MUST NEVER initiate or force a catering session
-      const isCurrentlyCatered = !isEcho && !isExistingDone && (existingFolder === 'catering' || Boolean(existingCateredRider || existingCateredRiderId)) && existingStatus !== 'cancelled';
+      // Preserve active catering across inbound messages and rider echoes ONLY IF actively in catering right now
+      const isCurrentlyCatered = !isExistingDone && existingFolder === 'catering' && existingStatus === 'active' && !existingCustomerMeta?.completedAt;
 
       let targetFolder = 'inbox';
       let targetStatus = 'active';
@@ -1294,7 +1294,7 @@ async function processMetaEntries(entries, cfg, ctx) {
         if (isExistingDone) {
           targetFolder = 'done';
           targetStatus = 'completed';
-        } else if (existingFolder === 'catering') {
+        } else if (isCurrentlyCatered) {
           targetFolder = 'catering';
           targetStatus = 'active';
         } else if (existingFolder === 'stores' || existingFolder === 'applicant' || existingFolder === 'followup') {
@@ -1305,18 +1305,16 @@ async function processMetaEntries(entries, cfg, ctx) {
           targetStatus = 'active';
         }
       } else {
-        // Customer inbound message
+        // Customer inbound message:
+        // Customer messages MUST ALWAYS route to inbox UNLESS thread is already active in catering right now
         if (isCurrentlyCatered) {
           targetFolder = 'catering';
           targetStatus = 'active';
-        } else if (isExistingDone) {
-          // If customer messages back on a completed thread, reopen in inbox for new inquiry
-          targetFolder = 'inbox';
-          targetStatus = 'active';
         } else if (existingFolder === 'stores' || existingFolder === 'applicant' || existingFolder === 'followup') {
           targetFolder = existingFolder;
-          targetStatus = 'active';
+          targetStatus = existingStatus || 'active';
         } else {
+          // New inquiry or message after completion: route directly to inbox!
           targetFolder = 'inbox';
           targetStatus = 'active';
         }
@@ -1361,7 +1359,7 @@ async function processMetaEntries(entries, cfg, ctx) {
         if (existingCustomerMeta?.completedBy) threadMeta.completedBy = existingCustomerMeta.completedBy;
         if (existingCustomerMeta?.completedByRiderId) threadMeta.completedByRiderId = existingCustomerMeta.completedByRiderId;
         if (existingCustomerMeta?.completedByRiderName) threadMeta.completedByRiderName = existingCustomerMeta.completedByRiderName;
-      } else if (targetFolder === 'catering' && (existingCateredRider || existingCateredRiderId)) {
+      } else if (targetFolder === 'catering' && isCurrentlyCatered && (existingCateredRider || existingCateredRiderId)) {
         threadMeta.folder = 'catering';
         threadMeta.status = 'active';
         threadMeta.cateredBy = existingCateredRider || null;
@@ -1575,7 +1573,18 @@ async function processMetaEntries(entries, cfg, ctx) {
                   }),
                   supabaseUpsert(cfg.supabaseUrl, cfg.supabaseKey, "customer_chat_meta", {
                     id: custId,
-                    data: { ...(existingCustomerMeta || {}), ...updatePayload },
+                    data: {
+                      ...threadMeta,
+                      ...updatePayload,
+                      folder: targetFolder,
+                      status: targetStatus,
+                      customerName: customerName,
+                      avatarUrl: avatarUrl,
+                      channel: "messenger",
+                      apiId: cfg.defaultApiId,
+                      apiName: cfg.defaultApiName,
+                      unreadForRider: true
+                    },
                     updated_at: new Date(now).toISOString()
                   }),
                   supabaseUpsert(cfg.supabaseUrl, cfg.supabaseKey, "customer_chats", {
@@ -1583,7 +1592,18 @@ async function processMetaEntries(entries, cfg, ctx) {
                     room_id: custId,
                     message: updatePayload.lastMessage,
                     timestamp: new Date(now).toISOString(),
-                    data: { ...(existingCustomerMeta || {}), ...updatePayload }
+                    data: {
+                      ...threadMeta,
+                      ...updatePayload,
+                      folder: targetFolder,
+                      status: targetStatus,
+                      customerName: customerName,
+                      avatarUrl: avatarUrl,
+                      channel: "messenger",
+                      apiId: cfg.defaultApiId,
+                      apiName: cfg.defaultApiName,
+                      unreadForRider: true
+                    }
                   })
                 ]);
               }

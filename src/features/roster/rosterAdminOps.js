@@ -255,7 +255,7 @@ export async function submitAdminForceCatering() {
     if (db && custName) {
         const cleanSearchName = custName.trim().toLowerCase();
         const selectedOpt = custSelect?.selectedOptions?.[0];
-        const selectedCustId = (selectedOpt && (selectedOpt.value.trim().toLowerCase() === cleanSearchName || selectedOpt.dataset?.custId))
+        const selectedCustId = (selectedOpt && selectedOpt.value.trim().toLowerCase() === cleanSearchName)
             ? (selectedOpt.dataset?.custId || null)
             : null;
 
@@ -278,14 +278,17 @@ export async function submitAdminForceCatering() {
                 const chats = snapshot.val() || {};
                 Object.keys(chats).forEach(custId => {
                     const meta = chats[custId]?.metadata || chats[custId] || {};
-                    // Never reopen or hijack completed, voided, or done chats
-                    if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+                    if (meta.status === 'voided') return;
 
                     const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
                     const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
                     const fbName = (resolvedFb?.name || "").trim().toLowerCase();
 
-                    if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
+                    const chatWords = chatCustName.split(/[\s,._-]+/).filter(Boolean);
+                    const fbWords = fbName.split(/[\s,._-]+/).filter(Boolean);
+                    const isFirstTokenMatch = (chatWords.length > 0 && chatWords[0] === cleanSearchName) || (fbWords.length > 0 && fbWords[0] === cleanSearchName);
+
+                    if (chatCustName === cleanSearchName || fbName === cleanSearchName || isFirstTokenMatch || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
                         db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
                         db.ref(`customerChatMeta/${custId}`).update(updateObj).catch(() => {});
                     }

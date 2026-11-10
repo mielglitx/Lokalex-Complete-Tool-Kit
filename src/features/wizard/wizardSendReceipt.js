@@ -468,7 +468,11 @@ function renderReceiptRecipientsList(recipients) {
                     </div>
                 </div>
             </div>
-            <button onclick="window.executeSendReceiptToCustId && window.executeSendReceiptToCustId('${escapeHtml(r.custId)}', '${escapeHtml(r.customerName)}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-sm shrink-0 cursor-pointer">
+            <button 
+                data-cust-id="${escapeHtml(r.custId)}"
+                data-cust-name="${escapeHtml(r.customerName)}"
+                onclick="window.executeSendReceiptToCustId && window.executeSendReceiptToCustId(this.getAttribute('data-cust-id'), this.getAttribute('data-cust-name'))" 
+                class="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-sm shrink-0 cursor-pointer">
                 <i class="fa-solid fa-paper-plane text-[10px]"></i> Send
             </button>
         </div>`;

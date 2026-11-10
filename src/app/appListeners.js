@@ -315,6 +315,9 @@ export function initRealtimeFirebaseListeners() {
             }
 
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
+            if (typeof window.reconcileCustomerThreadsWithRoster === 'function') {
+                window.reconcileCustomerThreadsWithRoster();
+            }
             window.dispatchEvent(new Event('rosterUpdated'));
             if (typeof window.requestRosterUIRefresh === 'function') {
                 window.requestRosterUIRefresh();

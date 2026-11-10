@@ -444,10 +444,8 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                             const tName = (t.customerName || t.name || '').trim().toLowerCase();
 
                             const matchesKey = keysToUpdate.has(k) || (rawPsid && (cleanK === rawPsid.toLowerCase() || tCustId === rawPsid.toLowerCase()));
-                            const matchesName = cleanSearchName && cleanSearchName !== 'customer' && (
+                            const matchesName = !directTargetId && cleanSearchName && cleanSearchName !== 'customer' && (
                                 tName === cleanSearchName || 
-                                tName.startsWith(cleanSearchName + ' ') || 
-                                cleanSearchName.startsWith(tName + ' ') || 
                                 (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, cleanSearchName))
                             );
 
@@ -480,38 +478,37 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 }
             }
 
-            // Always sweep matching customer threads in cachedCustomerThreadsMap by customer name
-            const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
-            if (threadMap && threadMap.size > 0) {
-                for (const [custId, meta] of threadMap.entries()) {
-                    if (meta.status === 'voided') {
-                        const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
-                        if (Date.now() - lastVoid < 60000) continue;
-                    }
+            // If a direct target ID was already catered, do not sweep unrelated customer threads!
+            // Only sweep when NO direct target ID was provided (e.g. manual name entry)
+            if (!directTargetId) {
+                const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+                if (threadMap && threadMap.size > 0) {
+                    for (const [custId, meta] of threadMap.entries()) {
+                        if (meta.status === 'voided') {
+                            const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
+                            if (Date.now() - lastVoid < 60000) continue;
+                        }
 
-                    const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                    const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
-                    const fbName = (resolvedFb?.name || "").toLowerCase().trim();
-                    const hasFbName = Boolean(fbName && fbName !== 'customer');
+                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                        const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                        const fbName = (resolvedFb?.name || "").toLowerCase().trim();
+                        const hasFbName = Boolean(fbName && fbName !== 'customer');
 
-                    const matchesFb = hasFbName && (
-                        fbName === cleanSearchName || 
-                        fbName.startsWith(cleanSearchName + ' ') || 
-                        cleanSearchName.startsWith(fbName + ' ') || 
-                        isCustomerMatch(fbName, cleanSearchName)
-                    );
-                    const matchesMeta = chatCustName && (
-                        chatCustName === cleanSearchName || 
-                        chatCustName.startsWith(cleanSearchName + ' ') || 
-                        cleanSearchName.startsWith(chatCustName + ' ') || 
-                        isCustomerMatch(chatCustName, cleanSearchName)
-                    );
+                        const matchesFb = hasFbName && (
+                            fbName === cleanSearchName || 
+                            isCustomerMatch(fbName, cleanSearchName)
+                        );
+                        const matchesMeta = chatCustName && (
+                            chatCustName === cleanSearchName || 
+                            isCustomerMatch(chatCustName, cleanSearchName)
+                        );
 
-                    if (matchesFb || matchesMeta) {
-                        if (!resolvedTargetChatId) resolvedTargetChatId = custId;
-                        applyChatCaterUpdate(custId);
-                        if (typeof window.triggerAutoMessageOnCater === 'function' && custId !== directTargetId) {
-                            window.triggerAutoMessageOnCater(custId, custName, myName);
+                        if (matchesFb || matchesMeta) {
+                            if (!resolvedTargetChatId) resolvedTargetChatId = custId;
+                            applyChatCaterUpdate(custId);
+                            if (typeof window.triggerAutoMessageOnCater === 'function') {
+                                window.triggerAutoMessageOnCater(custId, custName, myName);
+                            }
                         }
                     }
                 }

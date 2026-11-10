@@ -498,6 +498,9 @@ export function openModernMenuCategory(catKey) {
 // ============================================================================
 
 export function switchModernWorkspaceTab(tabId) {
+    if (tabId !== 'chats') {
+        unlockedCateringChatRooms.clear();
+    }
     modernActiveTab = tabId;
     const tabs = ['chats', 'rotations', 'logins', 'catered'];
     const isLight = document.getElementById('modern-ui-workspace')?.classList.contains('modern-theme-light') || (typeof getModernTheme === 'function' && getModernTheme() === 'light');
@@ -554,16 +557,14 @@ export function refreshCurrentTab() {
                 syncModernRightChatRoom();
             }
         } else {
-            if (!activeCustId && filtered.length > 0) {
+            if (filtered.length > 0) {
                 const first = filtered[0];
                 const cid = first.custId || first.id;
                 const name = formatTitleCase(first.customerName || first.name || "Customer");
                 const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
                 selectModernCustomerChat(cid, name, avatar);
-            } else if (!activeCustId) {
-                clearModernChatRightRoom();
-                renderModernChatLeftList();
             } else {
+                clearModernChatRightRoom();
                 renderModernChatLeftList();
             }
         }
@@ -755,8 +756,9 @@ export function getModernFilteredThreads(customCategory = null) {
         const folder = (t.folder || 'inbox').toLowerCase();
         const isExplicitDone = (folder === 'done' || t.status === 'completed' || t.status === 'done' || t.status === 'cancelled');
 
-        // Only consider catering if there is an active roster caterer OR (thread is marked catering/has catering fields AND NOT explicitly done)
-        const hasCatering = Boolean(activeCaterer || (!isExplicitDone && (folder === 'catering' || t.cateredByRiderName || t.cateredByRiderId || t.cateredBy)));
+        // Only consider catering if there is an active roster caterer!
+        // A customer with NO active caterer on the live roster is NEVER placed in catering!
+        const hasCatering = Boolean(activeCaterer);
 
         if (hasCatering) {
             t.folder = 'catering';
@@ -770,18 +772,21 @@ export function getModernFilteredThreads(customCategory = null) {
             t.cateredByRiderId = null;
             t.cateredBy = null;
             t.isForcedCater = false;
-        }
-
-        const curFolder = (t.folder || 'inbox').toLowerCase();
-        const isDone = !hasCatering && isExplicitDone;
-
-        // Stale caterer sanitization: Only if thread is strictly in inbox or explicitly done without catering
-        if (!hasCatering && (curFolder === 'inbox' || isDone)) {
+        } else {
+            // Thread has no active caterer on roster: strictly keep in inbox (or other non-catering folder)
+            // and purge any stale catering attribution
+            if (t.folder === 'catering') {
+                t.folder = 'inbox';
+                t.status = 'active';
+            }
             t.cateredByRiderName = null;
             t.cateredByRiderId = null;
             t.cateredBy = null;
             t.isForcedCater = false;
         }
+
+        const curFolder = (t.folder || 'inbox').toLowerCase();
+        const isDone = !hasCatering && isExplicitDone;
 
         const isCatered = hasCatering;
 
@@ -820,7 +825,14 @@ export function getModernFilteredThreads(customCategory = null) {
 }
 
 export function selectModernChatCategory(category) {
+    const prevCategory = modernChatCategory;
     modernChatCategory = category;
+
+    // If leaving the catering folder, all unlocked chatcards are locked again
+    if (category !== 'catering') {
+        unlockedCateringChatRooms.clear();
+    }
+
     const categories = ['inbox', 'catering', 'stores', 'followup', 'done', 'applicant'];
     categories.forEach(cat => {
         const btn = document.getElementById(`modern-cat-${cat}`);
@@ -832,19 +844,43 @@ export function selectModernChatCategory(category) {
         }
     });
 
+    if (typeof window.reconcileCustomerThreadsWithRoster === 'function') {
+        window.reconcileCustomerThreadsWithRoster();
+    }
+
     const filtered = getModernFilteredThreads(category);
+    const activeCustId = getActiveRiderChatCustId();
+    const cleanActive = String(activeCustId || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+    const activeBelongsToFolder = cleanActive && filtered.some(t => {
+        const cleanT = String(t.custId || t.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+        return cleanT && cleanT === cleanActive;
+    });
+
+    if (!activeBelongsToFolder) {
+        clearModernChatRightRoom();
+    }
+
     if (filtered && filtered.length > 0) {
-        // Auto open the first chat card in this folder
-        const first = filtered[0];
-        const cid = first.custId || first.id;
-        const name = formatTitleCase(first.customerName || first.name || "Customer");
-        const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
-        selectModernCustomerChat(cid, name, avatar);
+        if (!activeBelongsToFolder) {
+            const first = filtered[0];
+            const cid = first.custId || first.id;
+            const name = formatTitleCase(first.customerName || first.name || "Customer");
+            const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
+            selectModernCustomerChat(cid, name, avatar);
+        } else {
+            renderModernChatLeftList();
+            if (!isCateringChatRoomLocked(activeCustId)) {
+                syncModernRightChatRoom();
+            }
+        }
     } else {
-        // If no chat card exists or is open in this folder, clear out the chat thread section
         clearModernChatRightRoom();
         renderModernChatLeftList();
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.selectModernChatCategory = selectModernChatCategory;
 }
 
 export async function handleModernChatSearch(val) {
@@ -950,7 +986,12 @@ export function renderModernChatLeftList() {
         }
 
         return `
-        <div id="modern-card-${cid}" class="${cardContainerClass}" onclick="window.selectModernCustomerChat('${escapeHtml(cid)}', '${escapeHtml(name)}', '${escapeHtml(avatar)}')">
+        <div id="modern-card-${escapeHtml(cid)}" 
+            class="${cardContainerClass}" 
+            data-cust-id="${escapeHtml(cid)}" 
+            data-customer-name="${escapeHtml(name)}" 
+            data-avatar-url="${escapeHtml(avatar)}"
+            onclick="window.handleModernCardSelect && window.handleModernCardSelect(this)">
             <div class="flex items-center justify-between gap-1 mb-1">
                 <div class="flex items-center gap-1 min-w-0 flex-1">
                     ${countBadgeHtml}
@@ -960,7 +1001,11 @@ export function renderModernChatLeftList() {
                     ${lockBadge}
                     ${myCustomerBadge}
                     <!-- Secret Swipe Menu Toggle Button -->
-                    <button type="button" onclick="event.stopPropagation(); window.toggleModernCardSwipe('${escapeHtml(cid)}')" class="px-1 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-mono shrink-0 cursor-pointer" title="Reveal Cater / Unread / Done actions">
+                    <button type="button" 
+                        data-cust-id="${escapeHtml(cid)}" 
+                        onclick="event.stopPropagation(); window.toggleModernCardSwipe && window.toggleModernCardSwipe(this.getAttribute('data-cust-id'))" 
+                        class="px-1 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-mono shrink-0 cursor-pointer" 
+                        title="Reveal Cater / Unread / Done actions">
                         ⇄
                     </button>
                 </div>
@@ -968,14 +1013,24 @@ export function renderModernChatLeftList() {
             <p class="text-[10px] text-slate-400 truncate leading-tight">${escapeHtml(msg)}</p>
 
             <!-- Revealable Secret Action Strip -->
-            <div id="modern-card-actions-${cid}" class="hidden flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-700/80">
-                <button type="button" onclick="event.stopPropagation(); window.handleThreadSwipeCater && window.handleThreadSwipeCater('${escapeHtml(cid)}', '${escapeHtml(name)}');" class="flex-1 py-1 rounded bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-black cursor-pointer">
+            <div id="modern-card-actions-${escapeHtml(cid)}" class="hidden flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-700/80">
+                <button type="button" 
+                    data-cust-id="${escapeHtml(cid)}" 
+                    data-customer-name="${escapeHtml(name)}"
+                    onclick="event.stopPropagation(); window.handleModernSwipeCaterClick && window.handleModernSwipeCaterClick(this);" 
+                    class="flex-1 py-1 rounded bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-black cursor-pointer">
                     Cater
                 </button>
-                <button type="button" onclick="event.stopPropagation(); window.handleThreadSwipeUnread && window.handleThreadSwipeUnread('${escapeHtml(cid)}');" class="flex-1 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold cursor-pointer">
+                <button type="button" 
+                    data-cust-id="${escapeHtml(cid)}" 
+                    onclick="event.stopPropagation(); window.handleModernSwipeUnreadClick && window.handleModernSwipeUnreadClick(this);" 
+                    class="flex-1 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold cursor-pointer">
                     Unread
                 </button>
-                <button type="button" onclick="event.stopPropagation(); window.handleThreadSwipeDone && window.handleThreadSwipeDone('${escapeHtml(cid)}');" class="flex-1 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black cursor-pointer">
+                <button type="button" 
+                    data-cust-id="${escapeHtml(cid)}" 
+                    onclick="event.stopPropagation(); window.handleModernSwipeDoneClick && window.handleModernSwipeDoneClick(this);" 
+                    class="flex-1 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black cursor-pointer">
                     Done
                 </button>
             </div>
@@ -1010,18 +1065,13 @@ export function isCateringChatRoomLocked(custId, thread = null) {
     }
     if (!t) return false;
 
-    // Check if the thread is completed: finished threads must NEVER be locked!
-    const isFinished = (t.folder || '').toLowerCase() === 'done' || t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+    // A catering room is ONLY locked if another rider on the live roster is actively catering this customer
     const activeCaterer = (typeof getActiveRosterCaterer === 'function')
         ? getActiveRosterCaterer(t.customerName, t.custId, t)
         : null;
-    if (isFinished && !activeCaterer) return false;
+    if (!activeCaterer) return false;
 
-    // Check if the thread is in catering folder or actively catered
-    const isCatering = Boolean(activeCaterer || (!isFinished && (t.folder === 'catering' || (typeof modernChatCategory !== 'undefined' && modernChatCategory === 'catering'))));
-    if (!isCatering) return false;
-
-    // Check if it belongs to another rider
+    // Check if it belongs to the current logged-in rider
     const loggedInAuth = getLoggedInRiderInfo();
     const isMine = isMyCustomerThread(t, loggedInAuth);
     if (isMine) return false;
@@ -1031,6 +1081,8 @@ export function isCateringChatRoomLocked(custId, thread = null) {
 
 export function renderModernLockedCateringRoom(targetCustId, targetName, targetAvatar) {
     try {
+        if (typeof closeRiderCustomerChatModal === 'function') closeRiderCustomerChatModal();
+        else if (typeof window.closeRiderCustomerChatModal === 'function') window.closeRiderCustomerChatModal();
         if (typeof window.stopChatPresence === 'function') window.stopChatPresence();
         if (typeof window.stopFbGraphPolling === 'function') window.stopFbGraphPolling();
     } catch (_) {}
@@ -1102,7 +1154,12 @@ export function renderModernLockedCateringRoom(targetCustId, targetName, targetA
                 </div>
                 Messages and receipt photos are not downloaded while locked to save your mobile data.
             </div>
-            <button type="button" onclick="window.unlockCateringChatRoom('${escapeHtml(targetCustId)}', '${escapeHtml(effectiveName)}', '${escapeHtml(effectiveAvatar)}')" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 active:scale-95 transition flex items-center gap-2 cursor-pointer">
+            <button type="button" 
+                data-cust-id="${escapeHtml(targetCustId)}" 
+                data-customer-name="${escapeHtml(effectiveName)}" 
+                data-avatar-url="${escapeHtml(effectiveAvatar)}" 
+                onclick="window.handleModernUnlockClick && window.handleModernUnlockClick(this)" 
+                class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 active:scale-95 transition flex items-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-lock-open text-xs"></i>
                 <span>Unlock & Load Chat</span>
             </button>
@@ -1175,6 +1232,47 @@ export function selectModernCustomerChat(custId, custName, avatarUrl) {
     dockChatMessagesToModern();
     syncModernRightChatRoom();
     renderModernChatLeftList();
+}
+
+export function handleModernCardSelect(el) {
+    if (!el) return;
+    const cid = el.getAttribute('data-cust-id');
+    const name = el.getAttribute('data-customer-name');
+    const avatar = el.getAttribute('data-avatar-url');
+    selectModernCustomerChat(cid, name, avatar);
+}
+
+export function handleModernSwipeCaterClick(btn) {
+    if (!btn) return;
+    const cid = btn.getAttribute('data-cust-id');
+    const name = btn.getAttribute('data-customer-name');
+    if (typeof window.handleThreadSwipeCater === 'function') {
+        window.handleThreadSwipeCater(cid, name);
+    }
+}
+
+export function handleModernSwipeUnreadClick(btn) {
+    if (!btn) return;
+    const cid = btn.getAttribute('data-cust-id');
+    if (typeof window.handleThreadSwipeUnread === 'function') {
+        window.handleThreadSwipeUnread(cid);
+    }
+}
+
+export function handleModernSwipeDoneClick(btn) {
+    if (!btn) return;
+    const cid = btn.getAttribute('data-cust-id');
+    if (typeof window.handleThreadSwipeDone === 'function') {
+        window.handleThreadSwipeDone(cid);
+    }
+}
+
+export function handleModernUnlockClick(btn) {
+    if (!btn) return;
+    const id = btn.getAttribute('data-cust-id');
+    const name = btn.getAttribute('data-customer-name');
+    const avatar = btn.getAttribute('data-avatar-url');
+    unlockCateringChatRoom(id, name, avatar);
 }
 
 export function toggleModernCardSwipe(cid) {
@@ -1593,7 +1691,7 @@ export function renderModernRotationsTab() {
             <div class="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-emerald-500/50 transition gap-1.5">
                 <div class="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
                     <span class="font-black text-emerald-400 font-mono text-xs shrink-0">#${idx + 1}</span>
-                    <button type="button" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="font-bold text-xs text-white hover:text-emerald-400 truncate text-left cursor-pointer">${escapeHtml(formatTitleCase(rawName))}</button>
+                    <button type="button" data-rider-id="${escapeHtml(mId)}" data-rider-name="${escapeHtml(rawName)}" onclick="window.openModernRiderProfile && window.openModernRiderProfile(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'))" class="font-bold text-xs text-white hover:text-emerald-400 truncate text-left cursor-pointer">${escapeHtml(formatTitleCase(rawName))}</button>
                     ${cooldownBadge}
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
@@ -1833,7 +1931,7 @@ export function renderModernDayOffBadgeHtml(riderId, rawName) {
         // Vacation animation when rider's day off is today
         if (canSetDayOff) {
             return `
-            <span onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff('${escapeHtml(riderId)}', '${escapeHtml(rawName)}', event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/60 text-teal-300 font-extrabold text-[9.5px] shadow-[0_0_12px_rgba(20,184,166,0.35)] animate-pulse shrink-0 cursor-pointer" title="Day-off is TODAY! (${escapeHtml(info.label)}) • Tap to edit">
+            <span data-rider-id="${escapeHtml(riderId)}" data-rider-name="${escapeHtml(rawName)}" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'), event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/60 text-teal-300 font-extrabold text-[9.5px] shadow-[0_0_12px_rgba(20,184,166,0.35)] animate-pulse shrink-0 cursor-pointer" title="Day-off is TODAY! (${escapeHtml(info.label)}) • Tap to edit">
                 <span class="inline-block animate-bounce text-xs" style="animation-duration: 1.1s;">🏖️</span>
                 <span class="uppercase tracking-wider font-black text-[9px] text-teal-200">Day Off</span>
             </span>`;
@@ -1850,7 +1948,7 @@ export function renderModernDayOffBadgeHtml(riderId, rawName) {
         // Scheduled day-off date/day
         if (canSetDayOff) {
             return `
-            <button type="button" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff('${escapeHtml(riderId)}', '${escapeHtml(rawName)}', event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#18232a] hover:bg-slate-800 border border-slate-700 hover:border-teal-500/50 text-slate-300 hover:text-teal-300 font-bold text-[9.5px] transition active:scale-95 cursor-pointer shrink-0" title="Scheduled Day-Off: ${escapeHtml(info.label)} • Tap to edit">
+            <button type="button" data-rider-id="${escapeHtml(riderId)}" data-rider-name="${escapeHtml(rawName)}" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'), event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#18232a] hover:bg-slate-800 border border-slate-700 hover:border-teal-500/50 text-slate-300 hover:text-teal-300 font-bold text-[9.5px] transition active:scale-95 cursor-pointer shrink-0" title="Scheduled Day-Off: ${escapeHtml(info.label)} • Tap to edit">
                 <i class="fa-solid fa-umbrella-beach text-[9px] text-teal-400"></i>
                 <span>${escapeHtml(info.label)}</span>
             </button>`;
@@ -1866,7 +1964,7 @@ export function renderModernDayOffBadgeHtml(riderId, rawName) {
     // Set day-off button when not set: ONLY rendered for Admin or the actual rider themselves!
     if (canSetDayOff) {
         return `
-        <button type="button" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff('${escapeHtml(riderId)}', '${escapeHtml(rawName)}', event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/40 hover:border-teal-400 text-teal-400 hover:text-teal-300 font-bold text-[9.5px] transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Set Day-Off for ${escapeHtml(rawName)}">
+        <button type="button" data-rider-id="${escapeHtml(riderId)}" data-rider-name="${escapeHtml(rawName)}" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'), event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/40 hover:border-teal-400 text-teal-400 hover:text-teal-300 font-bold text-[9.5px] transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Set Day-Off for ${escapeHtml(rawName)}">
             <i class="fa-solid fa-plus text-[8.5px]"></i>
             <span>Set Day-Off</span>
         </button>`;
@@ -1981,7 +2079,7 @@ export function renderModernLoginsTab() {
                     const dayOffBadge = renderModernDayOffBadgeHtml(rId, rawName);
 
                     return `
-                    <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
+                    <div data-rider-id="${escapeHtml(rId)}" data-rider-name="${escapeHtml(rawName)}" class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition cursor-pointer" onclick="window.openModernRiderProfile && window.openModernRiderProfile(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'))">
                         <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
                             <span class="font-extrabold text-xs text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
                             ${dayOffBadge}
@@ -1989,7 +2087,7 @@ export function renderModernLoginsTab() {
                         <div class="flex items-center gap-1 min-w-0">
                             <span class="font-mono text-xs font-bold text-slate-800 dark:text-slate-300">${escapeHtml(timeIn)}</span>
                             ${canManage ? `
-                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(rId)}', '${escapeHtml(rawName)}', '${escapeHtml(timeIn)}')" class="text-[9px] text-slate-500 hover:text-amber-500 px-0.5 transition active:scale-90 cursor-pointer" title="Edit Time In">✏️</button>
+                                <button type="button" data-rider-id="${escapeHtml(rId)}" data-rider-name="${escapeHtml(rawName)}" data-time-in="${escapeHtml(timeIn)}" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'), this.getAttribute('data-time-in'))" class="text-[9px] text-slate-500 hover:text-amber-500 px-0.5 transition active:scale-90 cursor-pointer" title="Edit Time In">✏️</button>
                             ` : ''}
                         </div>
                         <span class="font-mono text-xs font-bold text-slate-800 dark:text-slate-300">${timeOut}</span>
@@ -2012,14 +2110,14 @@ export function renderModernLoginsTab() {
                     const dayOffBadge = renderModernDayOffBadgeHtml(mId, rawName);
 
                     return `
-                    <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
+                    <div data-rider-id="${escapeHtml(mId)}" data-rider-name="${escapeHtml(rawName)}" class="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition cursor-pointer" onclick="window.openModernRiderProfile && window.openModernRiderProfile(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'))">
                         <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
                             <span class="font-extrabold text-xs text-slate-900 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
                             ${dayOffBadge}
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
                             ${canManage ? `
-                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-400 text-[10px] font-black transition active:scale-95 cursor-pointer" title="Manually Set Time In for ${escapeHtml(rawName)}">+ Time In</button>
+                                <button type="button" data-rider-id="${escapeHtml(mId)}" data-rider-name="${escapeHtml(rawName)}" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'))" class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-400 text-[10px] font-black transition active:scale-95 cursor-pointer" title="Manually Set Time In for ${escapeHtml(rawName)}">+ Time In</button>
                             ` : ''}
                             <span class="text-[10px] text-slate-600 dark:text-slate-500 font-mono font-semibold">Offline</span>
                         </div>
@@ -2124,7 +2222,7 @@ export async function openModernRiderProfile(riderId, riderName) {
     card.innerHTML = `
     <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
         <span class="text-xs font-black text-emerald-400 uppercase tracking-wide">Rider Profile Inspector</span>
-        <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${escapeHtml(riderId)}', '${escapeHtml(riderName)}')" class="text-[10px] text-sky-400 font-bold hover:underline cursor-pointer">Full Details ↗</button>
+        <button type="button" data-rider-id="${escapeHtml(riderId)}" data-rider-name="${escapeHtml(riderName)}" onclick="window.openRiderInfoModal && window.openRiderInfoModal(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'))" class="text-[10px] text-sky-400 font-bold hover:underline cursor-pointer">Full Details ↗</button>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr] items-center gap-3">
         <img src="${photoUrl}" class="w-14 h-14 rounded-full object-cover border-2 border-emerald-500 shadow-md mx-auto sm:mx-0">
@@ -2140,7 +2238,7 @@ export async function openModernRiderProfile(riderId, riderName) {
             ${canManage ? `
                 <div class="col-span-2 pt-1.5 mt-0.5 border-t border-slate-800/80 flex items-center justify-between">
                     <span class="text-slate-400">Time In:</span>
-                    <button type="button" onclick="window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(riderId)}', '${escapeHtml(riderName)}', '${escapeHtml(loginRec?.loginTime || '')}')" class="px-2 py-0.5 rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 font-sans font-bold text-[10px] transition active:scale-95 cursor-pointer shadow-2xs">
+                    <button type="button" data-rider-id="${escapeHtml(riderId)}" data-rider-name="${escapeHtml(riderName)}" data-login-time="${escapeHtml(loginRec?.loginTime || '')}" onclick="window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn(this.getAttribute('data-rider-id'), this.getAttribute('data-rider-name'), this.getAttribute('data-login-time'))" class="px-2 py-0.5 rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 font-sans font-bold text-[10px] transition active:scale-95 cursor-pointer shadow-2xs">
                         ⏱️ ${loginRec?.loginTime ? `Edit Time In (${escapeHtml(loginRec.loginTime)})` : `+ Set Time In`}
                     </button>
                 </div>
@@ -2281,7 +2379,7 @@ export function renderModernCateredTab() {
                     </div>
 
                     ${isUserAdmin ? `
-                        <button type="button" onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(rc.riderName || '')}', '${escapeHtml(rc.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(txId)}')" class="px-2 py-0.5 rounded-lg border border-red-500/50 hover:bg-red-500/20 text-rose-600 dark:text-rose-400 font-black text-[10px] transition active:scale-95 cursor-pointer shrink-0" title="Void Customer Record">
+                        <button type="button" data-rider-name="${escapeHtml(rc.riderName || '')}" data-customer-name="${escapeHtml(rc.customerName || '')}" data-date="${escapeHtml(cDate)}" data-tx-id="${escapeHtml(txId)}" onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord(this.getAttribute('data-rider-name'), this.getAttribute('data-customer-name'), this.getAttribute('data-date'), this.getAttribute('data-tx-id'))" class="px-2 py-0.5 rounded-lg border border-red-500/50 hover:bg-red-500/20 text-rose-600 dark:text-rose-400 font-black text-[10px] transition active:scale-95 cursor-pointer shrink-0" title="Void Customer Record">
                             <i class="fa-solid fa-ban text-[9px]"></i> Void
                         </button>
                     ` : ''}
@@ -2576,5 +2674,10 @@ if (typeof window !== 'undefined') {
     window.isCateringChatRoomLocked = isCateringChatRoomLocked;
     window.renderModernLockedCateringRoom = renderModernLockedCateringRoom;
     window.unlockCateringChatRoom = unlockCateringChatRoom;
+    window.handleModernCardSelect = handleModernCardSelect;
+    window.handleModernSwipeCaterClick = handleModernSwipeCaterClick;
+    window.handleModernSwipeUnreadClick = handleModernSwipeUnreadClick;
+    window.handleModernSwipeDoneClick = handleModernSwipeDoneClick;
+    window.handleModernUnlockClick = handleModernUnlockClick;
 }
 

@@ -143,7 +143,10 @@ export function setupWizardClientDetails() {
                 : "bg-gray-800 border-gray-700 text-gray-300 hover:text-white";
 
             return `
-            <button type="button" onclick="window.selectCateredClientName && window.selectCateredClientName('${escapeHtml(c.name)}')" class="${activeClass} border text-xs font-bold px-3 py-1.5 rounded-lg transition active:scale-95 flex items-center gap-1.5 cursor-pointer">
+            <button type="button" 
+                data-client-name="${escapeHtml(c.name)}"
+                onclick="window.selectCateredClientName && window.selectCateredClientName(this.getAttribute('data-client-name'))" 
+                class="${activeClass} border text-xs font-bold px-3 py-1.5 rounded-lg transition active:scale-95 flex items-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-user"></i> ${escapeHtml(c.name)}
             </button>`;
         }).join('');
@@ -151,7 +154,10 @@ export function setupWizardClientDetails() {
     } else {
         const cartSlotDisplay = activeCartIdx + 1;
         btnBox.innerHTML = `
-            <button type="button" onclick="window.selectCateredClientName && window.selectCateredClientName('${escapeHtml(currentClient)}')" class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95 cursor-pointer">
+            <button type="button" 
+                data-client-name="${escapeHtml(currentClient)}"
+                onclick="window.selectCateredClientName && window.selectCateredClientName(this.getAttribute('data-client-name'))" 
+                class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95 cursor-pointer">
                 <i class="fa-solid fa-user"></i> ${escapeHtml(currentClient)} (Cart ${cartSlotDisplay})
             </button>`;
     }

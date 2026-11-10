@@ -660,11 +660,20 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
             // Only update customerChatMeta if this graph message has real content and is newer or equal to current metadata timestamp
             const currentMetaTs = Number(currentRiderChatMeta?.lastUpdated) || 0;
             if (formattedLatestPreview && absTs && absTs >= currentMetaTs) {
-                db.ref(`customerChatMeta/${targetCustId}`).update({
+                const isCatered = (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering' || Boolean(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId);
+                const isCustomerMsg = !isFromPage;
+                const updatePayload = {
                     lastMessage: formattedLatestPreview,
                     lastUpdated: absTs,
                     channel: 'messenger'
-                }).catch(() => {});
+                };
+                if (isCustomerMsg && (currentRiderChatMeta?.folder === 'done' || currentRiderChatMeta?.status === 'completed')) {
+                    updatePayload.folder = isCatered ? 'catering' : 'inbox';
+                    updatePayload.status = 'active';
+                    updatePayload.completedAt = null;
+                    updatePayload.unreadForRider = true;
+                }
+                db.ref(`customerChatMeta/${targetCustId}`).update(updatePayload).catch(() => {});
 
                 try {
                     if (typeof getCachedCustomerThreadsMap === 'function') {

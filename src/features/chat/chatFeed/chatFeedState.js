@@ -221,6 +221,16 @@ export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', cus
         const clean = val.trim().toLowerCase();
         if (clean && clean !== 'customer' && clean !== 'customer name' && clean !== 'null' && clean !== 'undefined' && !clean.startsWith('fb customer (')) {
             candidates.add(clean);
+            // Also add first token / nickname if multi-word:
+            // e.g. "JD El-khafrawy" -> add "jd"
+            // "Joshua Quial" -> add "joshua"
+            const parts = clean.split(/[\s,._-]+/).filter(w => w.length >= 2);
+            if (parts.length > 1) {
+                const first = parts[0];
+                if (first.length >= 2 && !['mr', 'ms', 'dr', 'the'].includes(first)) {
+                    candidates.add(first);
+                }
+            }
         }
     };
 
@@ -236,9 +246,16 @@ export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', cus
         if (id.startsWith('cust_')) {
             add(id.replace(/^cust_/, '').replace(/_/g, ' '));
         } else if (id.startsWith('fb_') || id.startsWith('messenger_') || /^\d{10,}$/.test(id)) {
+            const rawPsid = id.replace(/^(?:fb_|messenger_)+/i, '').trim();
             if (typeof window !== 'undefined' && typeof window.getResolvedFbName === 'function') {
-                const fb = window.getResolvedFbName(id);
-                if (fb && fb.name) add(fb.name);
+                const fb1 = window.getResolvedFbName(id);
+                if (fb1 && fb1.name) add(fb1.name);
+                if (rawPsid) {
+                    const fb2 = window.getResolvedFbName(rawPsid);
+                    if (fb2 && fb2.name) add(fb2.name);
+                    const fb3 = window.getResolvedFbName(`fb_${rawPsid}`);
+                    if (fb3 && fb3.name) add(fb3.name);
+                }
             }
         }
     }
@@ -329,6 +346,26 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
     const threadFolder = (meta?.folder || '').toLowerCase();
     const isExplicitDone = threadFolder === 'done' || meta?.status === 'completed' || meta?.status === 'done' || meta?.status === 'cancelled';
     const candidateNames = getThreadCustomerCandidates(meta, custName, custId);
+    const cleanId = String(custId || meta?.custId || meta?.id || meta?.key || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+
+    // 0. Direct ID matching across forcedCaters & currentCustomerId (authoritative regardless of placeholder name)
+    if (cleanId && cleanId !== 'customer') {
+        const idMatched = liveRoster.find(m => {
+            if (m.status !== 'Catering') return false;
+            if (m.currentCustomerId) {
+                const cleanCurrent = String(m.currentCustomerId).replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+                if (cleanCurrent && cleanCurrent === cleanId) return true;
+            }
+            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                    const cleanF = String(fKey || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+                    if (cleanF && cleanF === cleanId && cleanF !== 'customer') return true;
+                }
+            }
+            return false;
+        });
+        if (idMatched) return idMatched;
+    }
 
     // 1. Direct match by candidate customer names or forcedCaters in live roster
     // (This is authoritative: if a rider is actively catering this customer right now on the live roster,
@@ -342,8 +379,13 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                 const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
                 for (const c of custs) {
                     for (const candidate of candidateNames) {
-                        if (c === candidate || candidate.startsWith(c + ' ') || c.startsWith(candidate + ' ') || isCustomerMatch(c, candidate)) {
+                        if (c === candidate || isCustomerMatch(c, candidate)) {
                             return true;
+                        }
+                        const cWords = c.split(/[\s,._-]+/).filter(Boolean);
+                        const candWords = candidate.split(/[\s,._-]+/).filter(Boolean);
+                        if (cWords.length > 0 && candWords.length > 0 && cWords[0] === candWords[0]) {
+                            if (cWords.length === 1 || candWords.length === 1) return true;
                         }
                     }
                 }
@@ -352,13 +394,20 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
             // Check forcedCaters map
             if (m.forcedCaters && typeof m.forcedCaters === 'object') {
                 for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                    const cleanFKey = String(fKey || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+                    if (cleanId && cleanFKey === cleanId && cleanFKey !== 'customer') return true;
                     if (custId && fKey === custId && fKey !== 'customer') return true;
                     const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
                     const cleanFName = (fName || '').toLowerCase().trim();
                     if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name') {
                         for (const candidate of candidateNames) {
-                            if (cleanFName === candidate || candidate.startsWith(cleanFName + ' ') || cleanFName.startsWith(candidate + ' ') || isCustomerMatch(fName, candidate)) {
+                            if (cleanFName === candidate || isCustomerMatch(fName, candidate)) {
                                 return true;
+                            }
+                            const fWords = cleanFName.split(/[\s,._-]+/).filter(Boolean);
+                            const candWords = candidate.split(/[\s,._-]+/).filter(Boolean);
+                            if (fWords.length > 0 && candWords.length > 0 && fWords[0] === candWords[0]) {
+                                if (fWords.length === 1 || candWords.length === 1) return true;
                             }
                         }
                     }
@@ -396,12 +445,15 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                 if (!riderMatches) return false;
 
                 // Guard: Verify rider is actually catering this customer or has them in currentCustomerId/forcedCaters
-                if (custId && m.currentCustomerId === custId) return true;
+                if (cleanId && m.currentCustomerId) {
+                    const cleanCurrent = String(m.currentCustomerId).replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+                    if (cleanCurrent && cleanCurrent === cleanId) return true;
+                }
                 if (candidateNames.size > 0 && m.customerName) {
-                    const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase());
+                    const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
                     for (const c of custs) {
                         for (const cand of candidateNames) {
-                            if (c === cand || cand.startsWith(c + ' ') || c.startsWith(cand + ' ') || isCustomerMatch(c, cand)) {
+                            if (c === cand || isCustomerMatch(c, cand)) {
                                 return true;
                             }
                         }
@@ -410,8 +462,8 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                     return false;
                 }
                 
-                // If the rider has no customerName yet specified, accept the match
-                return !m.customerName;
+                // If the rider has no customer assigned on the roster, they are NOT catering this customer!
+                return false;
             });
             if (member) return member;
         }

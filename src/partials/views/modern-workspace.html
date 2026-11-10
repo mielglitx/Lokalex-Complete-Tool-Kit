@@ -255,32 +255,32 @@
 
                 <!-- 6 Category Pills -->
                 <div class="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5" style="touch-action: pan-x; -webkit-overflow-scrolling: touch;">
-                    <button id="modern-cat-inbox" type="button" onclick="window.selectModernChatCategory('inbox')" class="px-2.5 py-1 rounded-lg border border-emerald-500/50 bg-emerald-500/15 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                    <button id="modern-cat-inbox" type="button" onclick="window.selectModernChatCategory ? window.selectModernChatCategory('inbox') : null" class="px-2.5 py-1 rounded-lg border border-emerald-500/50 bg-emerald-500/15 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Inbox</span>
                         <span id="modern-cat-badge-inbox" class="hidden w-4 h-4 rounded-full bg-emerald-500 text-black font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
                     </button>
 
-                    <button id="modern-cat-catering" type="button" onclick="window.selectModernChatCategory('catering')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                    <button id="modern-cat-catering" type="button" onclick="window.selectModernChatCategory ? window.selectModernChatCategory('catering') : null" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Catering</span>
                         <span id="modern-cat-badge-catering" class="hidden w-4 h-4 rounded-full bg-amber-400 text-black font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
                     </button>
 
-                    <button id="modern-cat-stores" type="button" onclick="window.selectModernChatCategory('stores')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                    <button id="modern-cat-stores" type="button" onclick="window.selectModernChatCategory ? window.selectModernChatCategory('stores') : null" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Store</span>
                         <span id="modern-cat-badge-stores" class="hidden w-4 h-4 rounded-full bg-blue-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
                     </button>
 
-                    <button id="modern-cat-followup" type="button" onclick="window.selectModernChatCategory('followup')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                    <button id="modern-cat-followup" type="button" onclick="window.selectModernChatCategory ? window.selectModernChatCategory('followup') : null" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Follow Up</span>
                         <span id="modern-cat-badge-followup" class="hidden w-4 h-4 rounded-full bg-rose-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
                     </button>
 
                     <!-- Done has NO badge count per specification (any customer messaging from Done moves to Inbox) -->
-                    <button id="modern-cat-done" type="button" onclick="window.selectModernChatCategory('done')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                    <button id="modern-cat-done" type="button" onclick="window.selectModernChatCategory ? window.selectModernChatCategory('done') : null" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Done</span>
                     </button>
 
-                    <button id="modern-cat-applicant" type="button" onclick="window.selectModernChatCategory('applicant')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                    <button id="modern-cat-applicant" type="button" onclick="window.selectModernChatCategory ? window.selectModernChatCategory('applicant') : null" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Applicant</span>
                         <span id="modern-cat-badge-applicant" class="hidden w-4 h-4 rounded-full bg-purple-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
                     </button>

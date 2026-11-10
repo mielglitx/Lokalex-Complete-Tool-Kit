@@ -149,11 +149,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     if (!displayName) displayName = "Customer";
 
                     const rawFolder = (meta.folder || 'inbox').toLowerCase();
-                    const hasActiveCaterFields = !!(meta.cateredByRiderId || meta.cateredByRiderName || meta.cateredBy);
                     // Always check live roster catering: active roster catering takes precedence!
                     const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
-                    const liveRoster = globalState.rosterMembers || [];
-                    const isCatered = Boolean(activeCaterer) || hasActiveCaterFields || rawFolder === 'catering';
+                    const isCatered = Boolean(activeCaterer || rawFolder === 'catering');
                     const completedAt = Number(meta.completedAt) || 0;
                     const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
                     const isNewCustMsg = Boolean(curLastMsg && !curLastMsg.startsWith('You:') && (completedAt <= 0 || lastMsgTime >= completedAt || meta.unreadForRider === true));
@@ -420,15 +418,24 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         const isExplicitDoneStatus = meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled' || rawFolder === 'done';
 
         // Only consider catering active if there is an active roster caterer, OR
-        // if marked catering / has catering fields AND the thread is NOT explicitly marked done!
-        const hasActiveCaterFields = Boolean(meta.cateredByRiderId || meta.cateredByRiderName || meta.cateredBy);
-        const isCateringActive = Boolean(activeCaterer || (!isExplicitDoneStatus && (hasActiveCaterFields || rawFolder === 'catering')));
+        // if explicitly in catering folder AND the thread is NOT explicitly marked done!
+        const isCateringActive = Boolean(activeCaterer || (!isExplicitDoneStatus && rawFolder === 'catering'));
 
         let isAlreadyDone = !activeCaterer && isExplicitDoneStatus;
         const completedAt = Number(meta.completedAt) || 0;
         const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
         const isCustomerIncomingMsg = Boolean(rawLastMsg && !rawLastMsg.startsWith('You:'));
-        const isNewMessageAfterDone = Boolean(isAlreadyDone && isCustomerIncomingMsg && completedAt > 0 && lastMsgTime > (completedAt + 2000) && meta.unreadForRider === true);
+        const isNewMessageAfterDone = Boolean(
+            isAlreadyDone && 
+            isCustomerIncomingMsg && 
+            (
+                completedAt <= 0 || 
+                lastMsgTime >= completedAt || 
+                meta.unreadForRider === true || 
+                meta.folder === 'inbox' ||
+                (meta.status === 'active' && rawFolder === 'inbox')
+            )
+        );
 
         if (isAlreadyDone && isNewMessageAfterDone) {
             // Customer sent a new message after order completion: PERMANENTLY resurrect back to Inbox!
@@ -442,6 +449,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             meta.cateredByRiderId = null;
             meta.cateredByRiderName = null;
             meta.cateredBy = null;
+            meta.unreadForRider = true;
             if (db && key && !isFromCache) {
                 const moveUpdate = { 
                     folder: 'inbox', 
@@ -518,13 +526,19 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             meta.cateredByRiderId = null;
             meta.cateredByRiderName = null;
             meta.cateredBy = null;
-        } else if (!isAlreadyDone && (threadFolder === 'catering' || hasActiveCaterFields)) {
+        } else if (!isAlreadyDone && isCateringActive) {
             // Retain active catering status without destructive background database overwrites
             threadFolder = 'catering';
             isCompletedStatus = false;
             meta.status = 'active';
             meta.folder = 'catering';
             meta.completedAt = null;
+        } else {
+            // Inbox, applicant, followup, or other non-catering active thread:
+            // Ensure stale catering fields are completely purged
+            meta.cateredByRiderId = null;
+            meta.cateredByRiderName = null;
+            meta.cateredBy = null;
         }
 
         const threadObj = {
@@ -608,7 +622,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 }
             }
 
-            const isThreadDone = threadObj.status === 'completed' || threadObj.status === 'done' || threadObj.folder === 'done' || existing.folder === 'done' || existing.status === 'completed';
+            const isThreadDone = takeCurrent 
+                ? (threadObj.status === 'completed' || threadObj.status === 'done' || threadObj.folder === 'done')
+                : (existing.status === 'completed' || existing.status === 'done' || existing.folder === 'done');
             const activeDedupCaterer = getActiveRosterCaterer(threadObj.customerName || existing.customerName, threadObj.custId || existing.custId, threadObj);
 
             if (isThreadDone && !activeDedupCaterer) {
@@ -629,60 +645,60 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     existing.cateredBy = null;
                     if (!existingHasMsg && currentHasMsg) existing.lastMessage = threadObj.lastMessage;
                 }
-            } else if (takeCurrent) {
-                threadObj.isUnread = threadObj.isUnread || existing.isUnread;
-                threadObj.isApplicant = threadObj.isApplicant || existing.isApplicant;
-                if (threadObj.isApplicant && threadObj.folder !== 'catering') {
-                    threadObj.folder = 'applicant';
-                }
-                if (!threadObj.cateredByRiderName && existing.cateredByRiderName && (threadObj.folder === 'catering' || existing.folder === 'catering')) {
-                    threadObj.folder = 'catering';
-                    threadObj.status = 'active';
-                    threadObj.completedAt = null;
-                    threadObj.cateredByRiderName = existing.cateredByRiderName;
-                    threadObj.cateredByRiderId = existing.cateredByRiderId;
-                    threadObj.cateredBy = existing.cateredBy || existing.cateredByRiderName;
-                } else if (!isThreadDone && (existing.folder === 'catering' || existing.cateredByRiderName)) {
-                    // PRESERVE active catering assignment against incoming unpopulated metadata snapshots
-                    threadObj.folder = 'catering';
-                    threadObj.status = 'active';
-                    threadObj.completedAt = null;
-                    threadObj.cateredByRiderName = existing.cateredByRiderName;
-                    threadObj.cateredByRiderId = existing.cateredByRiderId;
-                    threadObj.cateredBy = existing.cateredBy || existing.cateredByRiderName;
-                }
-                if (!currentHasMsg && existingHasMsg) {
-                    threadObj.lastMessage = existing.lastMessage;
-                }
-                threadsMap.set(dedupKey, threadObj);
             } else {
-                existing.isUnread = existing.isUnread || threadObj.isUnread;
-                existing.isApplicant = existing.isApplicant || threadObj.isApplicant;
-                if (existing.isApplicant && existing.folder !== 'catering') {
-                    existing.folder = 'applicant';
+                // Live roster active caterer check:
+                if (activeDedupCaterer) {
+                    const targetObj = takeCurrent ? threadObj : existing;
+                    targetObj.folder = 'catering';
+                    targetObj.status = 'active';
+                    targetObj.completedAt = null;
+                    targetObj.cateredByRiderId = (activeDedupCaterer.telegramId || activeDedupCaterer.id || "").toString().trim();
+                    targetObj.cateredByRiderName = (activeDedupCaterer.riderName || activeDedupCaterer.name || "Rider").toString().trim();
+                    targetObj.cateredBy = targetObj.cateredByRiderName;
+                } else {
+                    // Not actively catered on the live roster: strictly sanitize catering fields!
+                    threadObj.cateredByRiderName = null;
+                    threadObj.cateredByRiderId = null;
+                    threadObj.cateredBy = null;
+                    threadObj.isForcedCater = false;
+                    if (threadObj.folder === 'catering') {
+                        threadObj.folder = isThreadDone ? 'done' : 'inbox';
+                        threadObj.status = isThreadDone ? 'completed' : 'active';
+                    }
+
+                    existing.cateredByRiderName = null;
+                    existing.cateredByRiderId = null;
+                    existing.cateredBy = null;
+                    existing.isForcedCater = false;
+                    if (existing.folder === 'catering') {
+                        existing.folder = isThreadDone ? 'done' : 'inbox';
+                        existing.status = isThreadDone ? 'completed' : 'active';
+                    }
                 }
-                if (!existing.cateredByRiderName && threadObj.cateredByRiderName && (existing.folder === 'catering' || threadObj.folder === 'catering')) {
-                    existing.folder = 'catering';
-                    existing.status = 'active';
-                    existing.completedAt = null;
-                    existing.cateredByRiderName = threadObj.cateredByRiderName;
-                    existing.cateredByRiderId = threadObj.cateredByRiderId;
-                    existing.cateredBy = threadObj.cateredBy || threadObj.cateredByRiderName;
-                } else if (!isThreadDone && (threadObj.folder === 'catering' || threadObj.cateredByRiderName)) {
-                    // PRESERVE active catering assignment
-                    existing.folder = 'catering';
-                    existing.status = 'active';
-                    existing.completedAt = null;
-                    existing.cateredByRiderName = threadObj.cateredByRiderName;
-                    existing.cateredByRiderId = threadObj.cateredByRiderId;
-                    existing.cateredBy = threadObj.cateredBy || threadObj.cateredByRiderName;
-                }
-                if (!existingHasMsg && currentHasMsg) {
-                    existing.lastMessage = threadObj.lastMessage;
-                }
-                if (curTs > exTs && currentHasMsg) {
-                    existing.lastMessage = threadObj.lastMessage;
-                    existing.lastUpdated = curTs;
+
+                if (takeCurrent) {
+                    threadObj.isUnread = threadObj.isUnread || existing.isUnread;
+                    threadObj.isApplicant = threadObj.isApplicant || existing.isApplicant;
+                    if (threadObj.isApplicant && threadObj.folder !== 'catering') {
+                        threadObj.folder = 'applicant';
+                    }
+                    if (!currentHasMsg && existingHasMsg) {
+                        threadObj.lastMessage = existing.lastMessage;
+                    }
+                    threadsMap.set(dedupKey, threadObj);
+                } else {
+                    existing.isUnread = existing.isUnread || threadObj.isUnread;
+                    existing.isApplicant = existing.isApplicant || threadObj.isApplicant;
+                    if (existing.isApplicant && existing.folder !== 'catering') {
+                        existing.folder = 'applicant';
+                    }
+                    if (!existingHasMsg && currentHasMsg) {
+                        existing.lastMessage = threadObj.lastMessage;
+                    }
+                    if (curTs > exTs && currentHasMsg) {
+                        existing.lastMessage = threadObj.lastMessage;
+                        existing.lastUpdated = curTs;
+                    }
                 }
             }
         } else {
@@ -700,6 +716,11 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
     }
 
     setCachedCustomerThreadsMap(threadsMap);
+
+    // Reconcile in-memory threads against live roster immediately
+    if (typeof reconcileCustomerThreadsWithRoster === 'function') {
+        reconcileCustomerThreadsWithRoster();
+    }
 
     const allThreads = Array.from(threadsMap.values());
     
@@ -779,6 +800,83 @@ export function listenToAllCustomerChatsForRider() {
         clearInterval(window._chatMetaPollingInterval);
         window._chatMetaPollingInterval = null;
     }
+}
+
+/**
+ * Reconciles in-memory cached customer threads against the live roster in real time.
+ * If a thread was assigned to a rider on the roster, its folder immediately updates to 'catering'.
+ * If catering ended or was voided, its folder immediately returns to 'inbox' or 'done'.
+ */
+export function reconcileCustomerThreadsWithRoster() {
+    if (!cachedCustomerThreadsMap || cachedCustomerThreadsMap.size === 0) return false;
+    let hasChanges = false;
+
+    for (const thread of cachedCustomerThreadsMap.values()) {
+        const activeCaterer = (typeof getActiveRosterCaterer === 'function')
+            ? getActiveRosterCaterer(thread.customerName, thread.custId, thread)
+            : null;
+
+        const currentFolder = (thread.folder || 'inbox').toLowerCase();
+        const isExplicitDone = currentFolder === 'done' || thread.status === 'completed' || thread.status === 'done' || thread.status === 'cancelled';
+
+        if (activeCaterer) {
+            const riderId = (activeCaterer.telegramId || activeCaterer.id || '').toString().trim();
+            const riderName = (activeCaterer.riderName || activeCaterer.name || 'Rider').toString().trim();
+
+            if (thread.folder !== 'catering' || thread.cateredByRiderId !== riderId || thread.cateredByRiderName !== riderName) {
+                thread.folder = 'catering';
+                thread.status = 'active';
+                thread.completedAt = null;
+                thread.cateredByRiderId = riderId;
+                thread.cateredByRiderName = riderName;
+                thread.cateredBy = riderName;
+                hasChanges = true;
+            }
+        } else if (currentFolder === 'catering') {
+            const targetFolder = isExplicitDone ? 'done' : 'inbox';
+            const targetStatus = isExplicitDone ? 'completed' : 'active';
+            thread.folder = targetFolder;
+            thread.status = targetStatus;
+            thread.cateredByRiderName = null;
+            thread.cateredByRiderId = null;
+            thread.cateredBy = null;
+            thread.isForcedCater = false;
+            hasChanges = true;
+
+            // Self-healing database sync: heal corrupted catering in database
+            if (db && thread.custId) {
+                const healPayload = {
+                    folder: targetFolder,
+                    status: targetStatus,
+                    cateredBy: null,
+                    cateredByRiderId: null,
+                    cateredByRiderName: null,
+                    isForcedCater: false,
+                    forcedBy: null
+                };
+                db.ref(`customerChats/${thread.custId}/metadata`).update(healPayload).catch(() => {});
+                db.ref(`customerChatMeta/${thread.custId}`).update(healPayload).catch(() => {});
+            }
+        } else if (!activeCaterer && (currentFolder === 'inbox' || isExplicitDone)) {
+            if (thread.cateredByRiderId || thread.cateredByRiderName || thread.cateredBy) {
+                thread.cateredByRiderName = null;
+                thread.cateredByRiderId = null;
+                thread.cateredBy = null;
+                hasChanges = true;
+            }
+        }
+    }
+
+    if (hasChanges) {
+        updateAllChatFolderBadges();
+        if (typeof window !== 'undefined' && typeof window.renderModernChatLeftList === 'function' && document.getElementById('modern-ui-workspace')) {
+            window.renderModernChatLeftList();
+        } else if (typeof renderRiderCustomerChatFeed === 'function') {
+            renderRiderCustomerChatFeed();
+        }
+    }
+
+    return hasChanges;
 }
 
 export function updateAllChatFolderBadges() {
@@ -1303,11 +1401,13 @@ if (typeof window !== 'undefined') {
     window.updatePipBadgeState = updatePipBadgeState;
     window.handlePipBadgeClick = handlePipBadgeClick;
     window.isRiderCurrentlyCatering = isRiderCurrentlyCatering;
+    window.reconcileCustomerThreadsWithRoster = reconcileCustomerThreadsWithRoster;
 
     let lastRosterCateringSig = '';
     window.addEventListener('rosterUpdated', () => {
         try {
             updatePipBadgeState();
+            reconcileCustomerThreadsWithRoster();
             const liveRoster = globalState.rosterMembers || [];
             const nextCateringSig = liveRoster
                 .filter(m => m && m.status === 'Catering')
