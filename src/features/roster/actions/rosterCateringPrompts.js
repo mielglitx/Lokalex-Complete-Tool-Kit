@@ -22,7 +22,26 @@ import { updateRosterStatusData } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
 import { purgeCartSlotForCustomer } from './rosterCateringCompletion.js';
 
-export function promptCateringStatus() {
+export async function promptCateringStatus() {
+    // 1. Authoritative server check: sync latest server roster snapshot to prevent screen-off / stale-cache queue bypasses
+    if (db && navigator.onLine) {
+        try {
+            const snap = await db.ref('roster').once('value');
+            const val = snap.val();
+            if (val && typeof val === 'object') {
+                globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
+                    ...item,
+                    telegramId: (item.telegramId || item.id || key).toString().trim(),
+                    id: (item.telegramId || item.id || key).toString().trim()
+                }));
+                saveRosterCache();
+                updateRosterUI();
+            }
+        } catch (snapErr) {
+            console.warn('[promptCateringStatus] Server snapshot query fallback to cache:', snapErr);
+        }
+    }
+
     if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
         loadRosterCache();
     }
@@ -149,6 +168,26 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                        (custSelect && custSelect.value ? custSelect.value.trim() : "");
         if (!custName || custName.toLowerCase() === 'customer' || custName.toLowerCase() === 'customer name') {
             return showToast("⚠️ Please enter or select a valid customer name.");
+        }
+
+        // Authoritative server check: fetch real-time server roster before lineup validation
+        // to prevent queue-jumping after phone screen unlock/sleep or offline reconnect
+        if (db && navigator.onLine) {
+            try {
+                const snap = await db.ref('roster').once('value');
+                const val = snap.val();
+                if (val && typeof val === 'object') {
+                    globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
+                        ...item,
+                        telegramId: (item.telegramId || item.id || key).toString().trim(),
+                        id: (item.telegramId || item.id || key).toString().trim()
+                    }));
+                    saveRosterCache();
+                    updateRosterUI();
+                }
+            } catch (snapErr) {
+                console.warn('[confirmCateringStatus] Server snapshot query fallback to cache:', snapErr);
+            }
         }
 
         if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {

@@ -160,14 +160,7 @@ export function initSyncWatchdog() {
                 }
             }
 
-            // Data Saver: If Realtime WebSocket is connected & healthy, changes are already pushed live!
-            // Skip redundant heavy PostgREST REST table downloads on momentary lock/unlock.
-            const isWsHealthy = typeof isRealtimeConnected === 'function' ? isRealtimeConnected() : true;
-            if (isWsHealthy && !isForced) {
-                return;
-            }
-
-            // Silent resync of roster rotation lineup and catering states
+            // 1. Silent resync of roster rotation lineup and catering states (always verify lineup on resume/wake)
             if (typeof window !== 'undefined' && typeof window.forceRefreshRosterList === 'function') {
                 try {
                     await window.forceRefreshRosterList(null, true);
@@ -176,13 +169,19 @@ export function initSyncWatchdog() {
                 }
             }
 
-            // Silent resync of live chat feed (inbox, catering, done, badges)
+            // 2. Silent resync of live chat feed (inbox, catering, done, badges)
             if (typeof window !== 'undefined' && typeof window.forceRefreshLiveChatsFeed === 'function') {
                 try {
                     await window.forceRefreshLiveChatsFeed(null, true);
                 } catch (err) {
                     console.warn('[SyncWatchdog] Live chat feed refresh note:', err);
                 }
+            }
+
+            // Data Saver: If Realtime WebSocket is connected & healthy, heavy PostgREST REST downloads are skipped
+            const isWsHealthy = typeof isRealtimeConnected === 'function' ? isRealtimeConnected() : true;
+            if (isWsHealthy && !isForced) {
+                return;
             }
 
             // If an active customer chat thread is currently open, refresh messages immediately
@@ -217,9 +216,9 @@ export function initSyncWatchdog() {
         if (wasDocumentHidden) {
             wasDocumentHidden = false;
             const awayDuration = Date.now() - (documentHiddenAt || 0);
-            // Only trigger resync if the screen was off or app was backgrounded for > 3 minutes (180s)
-            if (awayDuration > 180000) {
-                triggerLifecycleResync(false);
+            // Whenever phone screen turns on or rider returns, immediately refresh roster lineup
+            if (awayDuration > 2000) {
+                triggerLifecycleResync(true);
             }
         }
     });
@@ -228,8 +227,8 @@ export function initSyncWatchdog() {
         if (wasDocumentHidden) {
             wasDocumentHidden = false;
             const awayDuration = Date.now() - (documentHiddenAt || 0);
-            if (awayDuration > 180000) {
-                triggerLifecycleResync(false);
+            if (awayDuration > 2000) {
+                triggerLifecycleResync(true);
             }
         }
     });

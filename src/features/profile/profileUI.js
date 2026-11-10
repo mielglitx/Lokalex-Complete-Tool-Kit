@@ -186,6 +186,11 @@ export async function openProfileSettingsModal() {
                 if (isAdmin()) userTypeHint.classList.add('hidden');
                 else userTypeHint.classList.remove('hidden');
             }
+            const adminPushBtn = document.getElementById('admin-broadcast-update-btn');
+            if (adminPushBtn) {
+                if (isAdmin()) adminPushBtn.classList.remove('hidden');
+                else adminPushBtn.classList.add('hidden');
+            }
             if (userTypeBadge) {
                 userTypeBadge.innerText = currentRole.toUpperCase();
                 if (currentRole === 'admin') {

@@ -813,6 +813,21 @@ export async function caterCurrentChatCustomer() {
         return;
     }
 
+    // Always fetch fresh server roster to verify true queue lineup before catering
+    if (db && navigator.onLine) {
+        try {
+            const snap = await db.ref('roster').once('value');
+            const val = snap.val();
+            if (val && typeof val === 'object') {
+                globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
+                    ...item,
+                    telegramId: (item.telegramId || item.id || key).toString().trim(),
+                    id: (item.telegramId || item.id || key).toString().trim()
+                }));
+            }
+        } catch (_) {}
+    }
+
     if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
         loadRosterCache();
     }

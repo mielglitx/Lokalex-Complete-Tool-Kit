@@ -267,12 +267,15 @@
                         <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Software Updates</label>
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Live Over-The-Air GitHub Updates</p>
                     </div>
-                    <div class="flex items-center gap-1.5 shrink-0">
+                    <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                         <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer" title="Pick version or rollback">
                             <i class="fa-solid fa-code-branch text-emerald-500"></i> Versions
                         </button>
                         <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer">
                             <i class="fa-solid fa-arrows-rotate"></i> Check Update
+                        </button>
+                        <button id="admin-broadcast-update-btn" type="button" onclick="window.broadcastAdminDemandUpdate && window.broadcastAdminDemandUpdate()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer" title="Push update to all active rider apps without polling data">
+                            <i class="fa-solid fa-bullhorn"></i> Push to Riders
                         </button>
                     </div>
                 </div>

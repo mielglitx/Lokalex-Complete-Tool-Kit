@@ -978,7 +978,7 @@ export function handleThreadCardClick(event, cardElOrCustId, custName, avatarUrl
     }
 }
 
-export function handleThreadSwipeCater(btnOrCustId, optionalName) {
+export async function handleThreadSwipeCater(btnOrCustId, optionalName) {
     let custId = btnOrCustId;
     let custName = optionalName;
     if (btnOrCustId && typeof btnOrCustId === 'object' && btnOrCustId.closest) {
@@ -1001,6 +1001,21 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
         if (typeof window.switchView === 'function') window.switchView('view-login');
         else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
         return;
+    }
+
+    // Always fetch fresh server roster to verify true queue lineup before opening cater
+    if (db && navigator.onLine) {
+        try {
+            const snap = await db.ref('roster').once('value');
+            const val = snap.val();
+            if (val && typeof val === 'object') {
+                globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
+                    ...item,
+                    telegramId: (item.telegramId || item.id || key).toString().trim(),
+                    id: (item.telegramId || item.id || key).toString().trim()
+                }));
+            }
+        } catch (_) {}
     }
 
     if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {

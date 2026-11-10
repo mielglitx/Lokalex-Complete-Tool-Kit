@@ -4,6 +4,7 @@ import { db } from '../../config/firebase.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast } from '../notifications.js';
 import { openSlideDeleteModal } from './systemModals.js';
+import { idbGet, idbSet } from '../../utils/storageEngine.js';
 
 let stagedGcashQrPayload = "";
 let stagedGcashQrImg = "";
@@ -387,7 +388,12 @@ export async function fetchGCashDetails() {
         }
         if (foundImg) {
             appState.gcashQrImg = foundImg;
-            localStorage.setItem('lokalex_gcash_qr_img', foundImg);
+            try {
+                localStorage.setItem('lokalex_gcash_qr_img', foundImg);
+            } catch (quotaErr) {
+                console.warn('[GCash] LocalStorage quota exceeded; persisting QR to IndexedDB instead.');
+            }
+            idbSet('meta', 'lokalex_gcash_qr_img', foundImg).catch(() => {});
             stagedGcashQrImg = foundImg;
             if (!stagedGcashQrPreviewUrl) {
                 stagedGcashQrPreviewUrl = foundImg;
@@ -475,6 +481,12 @@ export async function openGCashModal() {
         const localNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
         stagedGcashQrPayload = appState.gcashQrPayload || localStorage.getItem('lokalex_gcash_qr_payload') || "";
         stagedGcashQrImg = appState.gcashQrImg || localStorage.getItem('lokalex_gcash_qr_img') || "";
+        if (!stagedGcashQrImg) {
+            try {
+                stagedGcashQrImg = await idbGet('meta', 'lokalex_gcash_qr_img') || "";
+                if (stagedGcashQrImg) appState.gcashQrImg = stagedGcashQrImg;
+            } catch (_) {}
+        }
 
         localStorage.removeItem('lokalex_gcash_qr');
         delete appState.gcashQrUrl;
@@ -547,9 +559,15 @@ export function executeSaveGCashDetails(gName, gNo, qrPayload = "", qrImg = "") 
     }
 
     if (qrImg) {
-        localStorage.setItem('lokalex_gcash_qr_img', qrImg);
+        try {
+            localStorage.setItem('lokalex_gcash_qr_img', qrImg);
+        } catch (_) {}
+        idbSet('meta', 'lokalex_gcash_qr_img', qrImg).catch(() => {});
     } else {
-        localStorage.removeItem('lokalex_gcash_qr_img');
+        try {
+            localStorage.removeItem('lokalex_gcash_qr_img');
+        } catch (_) {}
+        idbSet('meta', 'lokalex_gcash_qr_img', null).catch(() => {});
     }
 
     const myRiderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();

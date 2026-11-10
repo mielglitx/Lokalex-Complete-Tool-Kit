@@ -9,6 +9,8 @@ import {
     openInstallPermissionSettings,
     openExternalLink
 } from '../native/nativeBridge.js';
+import { db } from '../config/firebase.js';
+import { appState } from '../store/state.js';
 import { showToast } from '../ui/notifications.js';
 import { showCustomPrompt } from '../ui/modals.js';
 
@@ -29,7 +31,7 @@ import { showCustomPrompt } from '../ui/modals.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = '1.2.14';
+const CURRENT_BUILT_IN_VERSION = '1.2.15';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 
@@ -221,8 +223,73 @@ export async function initOtaUpdater() {
         setTimeout(() => {
             checkForOtaUpdate(false).catch(() => {});
         }, 5000);
+
+        // 3. Listen to instant Admin On-Demand Update pushes via live WebSocket (0 bytes continuous polling)
+        initAdminDemandUpdateListener();
     } catch (e) {
         console.warn("[OTA] Initialization warning:", e);
+    }
+}
+
+/**
+ * Real-time event listener for Admin-demanded updates.
+ * Costs 0 continuous polling bytes because it leverages the existing Firebase WebSocket connection.
+ */
+export function initAdminDemandUpdateListener() {
+    if (!db) return;
+    try {
+        db.ref('adminSettings/appUpdateDemand').on('value', async (snapshot) => {
+            const demand = snapshot.val();
+            if (!demand || !demand.targetVersion) return;
+
+            const targetVer = String(demand.targetVersion).trim().replace(/^v/i, '');
+            const currentVer = await getCurrentAppVersion();
+
+            if (compareVersions(targetVer, currentVer) > 0) {
+                console.log(`📢 [OTA] Admin demanded update to v${targetVer} (Installed: v${currentVer})`);
+
+                const now = Date.now();
+                const lastAttempt = parseInt(sessionStorage.getItem('lokalex_ota_demand_attempt') || '0', 10);
+                if (now - lastAttempt < 120000) return;
+                sessionStorage.setItem('lokalex_ota_demand_attempt', String(now));
+
+                if (demand.mandatory) {
+                    showToast(`🚀 New update v${targetVer} received from Admin. Updating...`);
+                }
+                checkForOtaUpdate(false).catch(() => {});
+            }
+        });
+    } catch (e) {
+        console.warn('[OTA] Admin demand listener note:', e);
+    }
+}
+
+/**
+ * Broadcasts an on-demand update command to all connected rider devices with zero polling data waste.
+ */
+export async function broadcastAdminDemandUpdate(targetVersion = null) {
+    if (!db) return showToast("⚠️ Database not reachable.");
+    const currentVer = await getCurrentAppVersion();
+    const versionToDemand = targetVersion || currentVer || CURRENT_BUILT_IN_VERSION;
+
+    const confirmed = confirm(
+        `📢 Force Update All Riders to v${versionToDemand}?\n\n` +
+        `This sends a lightweight push command to all active rider devices to immediately update to v${versionToDemand}.\n\n` +
+        `Zero continuous data is wasted (uses live WebSocket event).`
+    );
+    if (!confirmed) return;
+
+    try {
+        await db.ref('adminSettings/appUpdateDemand').set({
+            targetVersion: versionToDemand,
+            demandedBy: appState.riderName || localStorage.getItem('riderName') || 'Admin',
+            mandatory: true,
+            timestamp: Date.now()
+        });
+        showToast(`✓ Broadcast sent! All riders will auto-update to v${versionToDemand}.`);
+    } catch (err) {
+        console.error('Failed to broadcast update demand:', err);
+        showToast('⚠️ Failed to send update broadcast: ' + err.message);
     }
 }
 
@@ -773,6 +840,7 @@ function renderOtaVersionsList(versions, currentVersion) {
 // Bind to window for HTML button onclick
 if (typeof window !== 'undefined') {
     window.checkForOtaUpdate = checkForOtaUpdate;
+    window.broadcastAdminDemandUpdate = broadcastAdminDemandUpdate;
     window.getCurrentAppVersion = getCurrentAppVersion;
     window.syncVersionTrackerElements = syncVersionTrackerElements;
     window.fetchAvailableOtaVersions = fetchAvailableOtaVersions;

@@ -266,16 +266,28 @@ export function initModernHeaderClock() {
 }
 
 export function updateModernHeaderClock() {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
     const clockEl = document.getElementById('modern-header-clock');
     if (clockEl) {
-        const now = new Date();
-        clockEl.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        clockEl.innerText = timeStr;
+    }
+    const menuClock = document.getElementById('modern-menu-clock');
+    if (menuClock) {
+        menuClock.innerText = `🕒 ${timeStr}`;
     }
 
-    const batteryEl = document.getElementById('modern-header-battery');
     const originalBattery = document.getElementById('header-battery-text');
-    if (batteryEl && originalBattery) {
-        batteryEl.innerText = originalBattery.innerText || '--%';
+    const batteryText = originalBattery ? (originalBattery.innerText || '--%') : '--%';
+
+    const batteryEl = document.getElementById('modern-header-battery');
+    if (batteryEl) {
+        batteryEl.innerText = batteryText;
+    }
+    const menuBattery = document.getElementById('modern-menu-battery');
+    if (menuBattery) {
+        menuBattery.innerText = `🔋 ${batteryText}`;
     }
 }
 

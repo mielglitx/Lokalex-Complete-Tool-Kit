@@ -938,7 +938,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-koLYtQSj.js"></script>
+  <script type="module" crossorigin src="./assets/index-Cejj_htF.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-CBNqoVD9.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
@@ -3464,7 +3464,7 @@
             </div>
         </div>
 
-        <!-- RIGHT: SYNC PILL + CLOCK + BATTERY + CLASSIC UI BUTTON -->
+        <!-- RIGHT: DATA USAGE + THEME TOGGLE + CLASSIC UI BUTTON (DE-CROWDED FOR BREATHABILITY) -->
         <div class="flex items-center gap-1.5 shrink-0">
             <!-- REALTIME SYNC STATUS PILL (Optimistic Background Handshake) -->
             <div id="modern-header-sync-pill" class="hidden px-2 py-1 rounded-xl text-[10px] sm:text-[11px] font-mono font-bold items-center gap-1.5 shrink-0 transition-all duration-300">
@@ -3472,12 +3472,13 @@
                 <span id="modern-header-sync-text">Synced</span>
             </div>
 
-            <div class="px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-slate-200 flex items-center gap-1 shrink-0" title="Current Time">
+            <!-- Optional Clock & Battery: visible on desktop/tablets (>= md), hidden on mobile to give header breathing room -->
+            <div class="hidden md:flex px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-slate-200 items-center gap-1 shrink-0" title="Current Time">
                 <span>🕒</span>
                 <span id="modern-header-clock">--:--</span>
             </div>
 
-            <div class="px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-emerald-400 flex items-center gap-1 shrink-0" title="Battery Status">
+            <div class="hidden md:flex px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-emerald-400 items-center gap-1 shrink-0" title="Battery Status">
                 <span>🔋</span>
                 <span id="modern-header-battery">--%</span>
             </div>
@@ -3502,14 +3503,19 @@
         <!-- FACEBOOK-STYLE FLOATING DRILL-DOWN HAMBURGER MENU                 -->
         <!-- ================================================================= -->
         <div id="modern-hamburger-popover" class="hidden absolute top-[calc(100%+6px)] left-2.5 w-[310px] sm:w-[340px] max-h-[82dvh] overflow-y-auto bg-[#182229] border border-slate-700 rounded-2xl shadow-2xl p-2.5 z-50 text-slate-100">
-            <!-- Profile Summary Card inside Menu -->
-            <div class="bg-[#11191e] border border-slate-800 rounded-xl p-2.5 mb-2 flex items-center justify-between gap-2">
+            <!-- Profile Summary Card inside Menu with System Status -->
+            <div class="bg-[#11191e] border border-slate-800 rounded-xl p-2.5 mb-2 flex flex-col gap-2">
                 <div onclick="window.closeModernHamburgerMenu(); window.handleHeaderUserClick && window.handleHeaderUserClick();" class="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1">
                     <img id="modern-menu-avatar" src="https://ui-avatars.com/api/?name=Rider&background=10b981&color=ffffff&bold=true&size=128" class="w-9 h-9 rounded-full object-cover border border-emerald-500 shrink-0" alt="Avatar">
                     <div class="min-w-0 flex-1">
                         <div id="modern-menu-rider-name" class="text-xs font-extrabold text-white truncate">Rider</div>
                         <div id="modern-menu-rider-role" class="text-[10px] text-emerald-400 font-mono">Lokalex Rider</div>
                     </div>
+                </div>
+                <div class="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-1.5 border-t border-slate-800/80">
+                    <span id="modern-menu-clock">🕒 --:--</span>
+                    <span id="modern-menu-battery">🔋 --%</span>
+                    <span class="text-sky-400 cursor-pointer hover:underline" onclick="window.closeModernHamburgerMenu(); window.openDataUsageModal && window.openDataUsageModal();">📊 Data Usage</span>
                 </div>
             </div>
 
@@ -9552,12 +9558,15 @@
                         <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Software Updates</label>
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Live Over-The-Air GitHub Updates</p>
                     </div>
-                    <div class="flex items-center gap-1.5 shrink-0">
+                    <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                         <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer" title="Pick version or rollback">
                             <i class="fa-solid fa-code-branch text-emerald-500"></i> Versions
                         </button>
                         <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer">
                             <i class="fa-solid fa-arrows-rotate"></i> Check Update
+                        </button>
+                        <button id="admin-broadcast-update-btn" type="button" onclick="window.broadcastAdminDemandUpdate && window.broadcastAdminDemandUpdate()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer" title="Push update to all active rider apps without polling data">
+                            <i class="fa-solid fa-bullhorn"></i> Push to Riders
                         </button>
                     </div>
                 </div>
