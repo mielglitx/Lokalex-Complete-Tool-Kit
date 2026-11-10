@@ -255,12 +255,17 @@ function executeRenderRiderCustomerChatFeed() {
                 t.status = 'active';
                 t.completedAt = null;
             } else if (hadStaleCaterer || wasInCatering) {
-                t.cateredByRiderId = null;
-                t.cateredByRiderName = null;
-                t.cateredBy = null;
-                if (wasInCatering) {
-                    const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-                    t.folder = isFinished ? 'done' : (t.isApplicant ? 'applicant' : 'inbox');
+                const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+                if (isFinished) {
+                    t.folder = 'done';
+                    t.cateredByRiderId = null;
+                    t.cateredByRiderName = null;
+                    t.cateredBy = null;
+                } else {
+                    // Do NOT demote active catering orders to inbox on roster sync lag!
+                    t.folder = 'catering';
+                    t.status = 'active';
+                    t.completedAt = null;
                 }
             }
         }

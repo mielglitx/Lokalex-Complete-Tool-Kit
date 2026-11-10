@@ -299,6 +299,14 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         const hasAnyForcedCaters = Object.keys(forcedCatersMap).length > 0;
 
+        // Synchronously update local roster record in-memory before server roundtrip
+        if (myRecord) {
+            myRecord.status = 'Catering';
+            myRecord.customerName = existingCustomers.join(', ');
+            myRecord.startTime = existingTimes.join(', ');
+            myRecord.lastUpdated = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
         try {
             await updateRosterStatusData(
                 'Catering', 
@@ -355,31 +363,37 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                     updateObj.forcedBy = null;
                     updateObj.isForcedCater = false;
                 }
-                db.ref(`customerChats/${targetChatId}/metadata`).update(updateObj).catch(() => {});
-                db.ref(`customerChatMeta/${targetChatId}`).update(updateObj).catch(() => {});
 
-                // Also update alternate prefixed or normalized targetChatId in RTDB to avoid split records
-                const altChatId = targetChatId.toString().startsWith('fb_') 
-                    ? targetChatId.toString().replace(/^fb_/, '') 
-                    : `fb_${targetChatId}`;
-                if (altChatId && altChatId !== targetChatId) {
-                    db.ref(`customerChats/${altChatId}/metadata`).update(updateObj).catch(() => {});
-                    db.ref(`customerChatMeta/${altChatId}`).update(updateObj).catch(() => {});
+                const cleanTargetStr = targetChatId.toString().trim();
+                const rawPsid = cleanTargetStr.replace(/^(?:fb_|messenger_|id_)+/i, '').trim();
+                const keysToUpdate = new Set();
+                if (cleanTargetStr) keysToUpdate.add(cleanTargetStr);
+                if (rawPsid) {
+                    keysToUpdate.add(rawPsid);
+                    keysToUpdate.add(`fb_${rawPsid}`);
+                    keysToUpdate.add(`messenger_${rawPsid}`);
+                    keysToUpdate.add(`id_${rawPsid}`);
                 }
 
-                // Immediately synchronize in-memory cachedCustomerThreadsMap
+                for (const key of keysToUpdate) {
+                    db.ref(`customerChats/${key}/metadata`).update(updateObj).catch(() => {});
+                    db.ref(`customerChatMeta/${key}`).update(updateObj).catch(() => {});
+                }
+
+                // Immediately synchronize in-memory cachedCustomerThreadsMap across keys & names
                 if (typeof window.getCachedCustomerThreadsMap === 'function') {
                     const threadMap = window.getCachedCustomerThreadsMap();
-                    if (threadMap) {
-                        const targetKeys = [
-                            targetChatId,
-                            `fb_${targetChatId}`,
-                            targetChatId.toString().replace(/^fb_/, ''),
-                            altChatId
-                        ];
-                        for (const k of targetKeys) {
-                            const t = threadMap.get(k);
-                            if (t) {
+                    if (threadMap && threadMap.size > 0) {
+                        for (const [k, t] of threadMap.entries()) {
+                            if (!t) continue;
+                            const cleanK = String(k || '').replace(/^(?:fb_|messenger_|id_)+/i, '').trim().toLowerCase();
+                            const tCustId = String(t.custId || t.id || '').replace(/^(?:fb_|messenger_|id_)+/i, '').trim().toLowerCase();
+                            const tName = (t.customerName || t.name || '').trim().toLowerCase();
+
+                            const matchesKey = keysToUpdate.has(k) || (rawPsid && (cleanK === rawPsid.toLowerCase() || tCustId === rawPsid.toLowerCase()));
+                            const matchesName = cleanSearchName && cleanSearchName !== 'customer' && (tName === cleanSearchName || (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, cleanSearchName)));
+
+                            if (matchesKey || matchesName) {
                                 t.folder = 'catering';
                                 t.status = 'active';
                                 t.completedAt = null;
@@ -389,7 +403,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                                 t.cateredByRiderId = resolvedId;
                                 t.cateredByRiderName = myName;
                                 t.cateredBy = myName;
-                                if (updateObj.customerName) t.customerName = updateObj.customerName;
+                                if (custName && custName.toLowerCase() !== 'customer') {
+                                    t.customerName = custName;
+                                }
                                 t.lastUpdated = updateObj.lastUpdated;
                             }
                         }
@@ -405,44 +421,46 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 if (typeof window.triggerAutoMessageOnCater === 'function') {
                     window.triggerAutoMessageOnCater(targetChatId, custName, myName);
                 }
-                if (typeof window.renderRiderCustomerChatFeed === 'function') {
-                    window.renderRiderCustomerChatFeed();
-                }
-            } else {
-                const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
-                if (threadMap && threadMap.size > 0) {
-                    for (const [custId, meta] of threadMap.entries()) {
-                        if (meta.status === 'voided') {
-                            const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
-                            if (Date.now() - lastVoid < 60000) continue;
-                        }
+            }
 
-                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
-                        const fbName = (resolvedFb?.name || "").toLowerCase().trim();
-                        const hasFbName = Boolean(fbName && fbName !== 'customer');
+            // Always sweep matching customer threads in cachedCustomerThreadsMap by customer name
+            const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+            if (threadMap && threadMap.size > 0) {
+                for (const [custId, meta] of threadMap.entries()) {
+                    if (meta.status === 'voided') {
+                        const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
+                        if (Date.now() - lastVoid < 60000) continue;
+                    }
 
-                        const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
-                        const matchesMeta = chatCustName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
+                    const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                    const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                    const fbName = (resolvedFb?.name || "").toLowerCase().trim();
+                    const hasFbName = Boolean(fbName && fbName !== 'customer');
 
-                        if (matchesFb || matchesMeta) {
-                            if (!resolvedTargetChatId) resolvedTargetChatId = custId;
-                            applyChatCaterUpdate(custId);
-                            if (typeof window.triggerAutoMessageOnCater === 'function') {
-                                window.triggerAutoMessageOnCater(custId, custName, myName);
-                            }
+                    const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
+                    const matchesMeta = chatCustName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
+
+                    if (matchesFb || matchesMeta) {
+                        if (!resolvedTargetChatId) resolvedTargetChatId = custId;
+                        applyChatCaterUpdate(custId);
+                        if (typeof window.triggerAutoMessageOnCater === 'function' && custId !== targetChatId) {
+                            window.triggerAutoMessageOnCater(custId, custName, myName);
                         }
                     }
-                    if (typeof window.renderRiderCustomerChatFeed === 'function') {
-                        window.renderRiderCustomerChatFeed();
-                    }
                 }
+            }
+
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                window.renderRiderCustomerChatFeed();
             }
         }
 
         closeCateringModal();
 
         // Switch to the catering tab / category and immediately load the customer chat room
+        if (typeof window.setRiderChatFilter === 'function') {
+            window.setRiderChatFilter('catering');
+        }
         const isModern = typeof window.isModernUiActive === 'function' && window.isModernUiActive();
         if (isModern) {
             if (typeof window.switchModernWorkspaceTab === 'function') {
@@ -455,9 +473,6 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 window.selectModernCustomerChat(resolvedTargetChatId || custName, custName);
             }
         } else {
-            if (typeof window.setRiderChatFilter === 'function') {
-                window.setRiderChatFilter('catering');
-            }
             if (typeof window.openRiderCustomerChatModal === 'function') {
                 window.openRiderCustomerChatModal(resolvedTargetChatId || custName, custName);
             }

@@ -604,12 +604,14 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     threadObj.cateredByRiderName = existing.cateredByRiderName;
                     threadObj.cateredByRiderId = existing.cateredByRiderId;
                     threadObj.cateredBy = existing.cateredBy || existing.cateredByRiderName;
-                } else if (threadObj.folder === 'inbox') {
-                    threadObj.cateredByRiderName = null;
-                    threadObj.cateredByRiderId = null;
-                    threadObj.cateredBy = null;
-                    threadObj.isForcedCater = false;
-                    threadObj.forcedBy = null;
+                } else if (existing.folder === 'catering' || existing.cateredByRiderName) {
+                    // PRESERVE active catering assignment against incoming unpopulated metadata snapshots
+                    threadObj.folder = 'catering';
+                    threadObj.status = 'active';
+                    threadObj.completedAt = null;
+                    threadObj.cateredByRiderName = existing.cateredByRiderName;
+                    threadObj.cateredByRiderId = existing.cateredByRiderId;
+                    threadObj.cateredBy = existing.cateredBy || existing.cateredByRiderName;
                 }
                 if (!currentHasMsg && existingHasMsg) {
                     threadObj.lastMessage = existing.lastMessage;
@@ -628,12 +630,14 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     existing.cateredByRiderName = threadObj.cateredByRiderName;
                     existing.cateredByRiderId = threadObj.cateredByRiderId;
                     existing.cateredBy = threadObj.cateredBy || threadObj.cateredByRiderName;
-                } else if (existing.folder === 'inbox') {
-                    existing.cateredByRiderName = null;
-                    existing.cateredByRiderId = null;
-                    existing.cateredBy = null;
-                    existing.isForcedCater = false;
-                    existing.forcedBy = null;
+                } else if (threadObj.folder === 'catering' || threadObj.cateredByRiderName) {
+                    // PRESERVE active catering assignment
+                    existing.folder = 'catering';
+                    existing.status = 'active';
+                    existing.completedAt = null;
+                    existing.cateredByRiderName = threadObj.cateredByRiderName;
+                    existing.cateredByRiderId = threadObj.cateredByRiderId;
+                    existing.cateredBy = threadObj.cateredBy || threadObj.cateredByRiderName;
                 }
                 if (!existingHasMsg && currentHasMsg) {
                     existing.lastMessage = threadObj.lastMessage;

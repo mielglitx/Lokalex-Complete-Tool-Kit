@@ -245,7 +245,7 @@ export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', cus
     if (typeof document !== 'undefined' && typeof window !== 'undefined') {
         const thisId = custId || tOrMeta?.custId || tOrMeta?.id || tOrMeta?.key || '';
         if (thisId && window.activeRiderChatCustId && String(thisId) === String(window.activeRiderChatCustId)) {
-            const activeChatName = document.getElementById('rider-chat-cust-name')?.innerText;
+            const activeChatName = document.getElementById('modern-chat-room-title')?.innerText || document.getElementById('rider-chat-cust-name')?.innerText;
             if (activeChatName) add(activeChatName);
         }
     }
