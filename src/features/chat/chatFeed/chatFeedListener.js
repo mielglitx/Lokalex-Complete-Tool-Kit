@@ -154,8 +154,14 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     const isCatered = Boolean(activeCaterer || rawFolder === 'catering');
                     const completedAt = Number(meta.completedAt) || 0;
                     const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
-                    const isNewCustMsg = Boolean(curLastMsg && !curLastMsg.startsWith('You:') && (completedAt <= 0 || lastMsgTime >= completedAt || meta.unreadForRider === true));
-                    const isDone = !isCatered && !isNewCustMsg && (rawFolder === 'done' || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled');
+                    const isExplicitDone = rawFolder === 'done' || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
+                    const isNewCustMsg = Boolean(
+                        curLastMsg && 
+                        !curLastMsg.startsWith('You:') && 
+                        meta.unreadForRider === true && 
+                        (!isExplicitDone || (completedAt > 0 && lastMsgTime > completedAt + 3000))
+                    );
+                    const isDone = !isCatered && isExplicitDone && !isNewCustMsg;
                     const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || meta.isApplicant === true);
                     const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
@@ -428,13 +434,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         const isNewMessageAfterDone = Boolean(
             isAlreadyDone && 
             isCustomerIncomingMsg && 
-            (
-                completedAt <= 0 || 
-                lastMsgTime >= completedAt || 
-                meta.unreadForRider === true || 
-                meta.folder === 'inbox' ||
-                (meta.status === 'active' && rawFolder === 'inbox')
-            )
+            meta.unreadForRider === true &&
+            completedAt > 0 &&
+            lastMsgTime > (completedAt + 3000)
         );
 
         if (isAlreadyDone && isNewMessageAfterDone) {
@@ -570,6 +572,8 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             threadObj.cateredByRiderId = null;
             threadObj.cateredByRiderName = null;
             threadObj.cateredBy = null;
+            threadObj.isUnread = false;
+            threadObj.unreadForRider = false;
         } else {
             const activeCateringRider = activeCaterer || (typeof getActiveRosterCaterer === 'function' ? getActiveRosterCaterer(displayName, key, meta) : null);
             if (activeCateringRider) {

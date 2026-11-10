@@ -454,8 +454,16 @@ export async function executeThreadDone(targetCustId = null, targetCustName = ""
             unreadForRider: false,
             lastUpdated: now
         };
-        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
-        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
+        const rawKey = String(custId || '').replace(/^(?:fb_|messenger_|id_)+/i, '').trim();
+        const keysToUpdate = new Set([custId]);
+        if (rawKey) {
+            keysToUpdate.add(rawKey);
+            keysToUpdate.add(`fb_${rawKey}`);
+        }
+        for (const k of keysToUpdate) {
+            db.ref(`customerChats/${k}/metadata`).update(payload).catch(() => {});
+            db.ref(`customerChatMeta/${k}`).update(payload).catch(() => {});
+        }
     }
 
     // Immediately synchronize in-memory thread and update feed

@@ -440,10 +440,7 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                         const completedAt = Number(existingMeta.completedAt) || 0;
                         const lastMsgTime = Number(existingMeta.lastUpdated) || 0;
                         const rawLastMsg = (existingMeta.lastMessage || '').trim();
-                        const hasNewCustomerMsg = Boolean(rawLastMsg && !rawLastMsg.startsWith('You:') && (completedAt <= 0 || lastMsgTime > completedAt || existingMeta.unreadForRider === true));
-
-                        // Check if already completed/done in Lokalex (e.g. from Clear Inbox or rider order completion)
-                        const isAlreadyDone = !hasNewCustomerMsg && Boolean(
+                        const isExplicitDoneInDb = Boolean(
                             existingMeta.status === 'completed' ||
                             existingMeta.status === 'done' ||
                             existingMeta.status === 'cancelled' ||
@@ -452,6 +449,15 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                             existingMeta.completedByRiderId ||
                             existingMeta.completedByRiderName
                         );
+                        const hasNewCustomerMsg = Boolean(
+                            rawLastMsg && 
+                            !rawLastMsg.startsWith('You:') && 
+                            existingMeta.unreadForRider === true && 
+                            (!isExplicitDoneInDb || (completedAt > 0 && lastMsgTime > completedAt + 3000))
+                        );
+
+                        // Check if already completed/done in Lokalex (e.g. from Clear Inbox or rider order completion)
+                        const isAlreadyDone = !hasNewCustomerMsg && isExplicitDoneInDb;
 
                         if (isAlreadyDone && (fbFolderParam === 'inbox' || targetFolder === 'inbox')) {
                             // Never resurrect a completed Lokalex thread back to Inbox during a Facebook Page folder poll.

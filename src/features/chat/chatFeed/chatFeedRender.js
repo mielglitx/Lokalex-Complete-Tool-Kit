@@ -190,7 +190,12 @@ function executeRenderRiderCustomerChatFeed() {
 
         // Customer sent a new message after order completion:
         // Automatically resurrect to active inbox (or catering if catered) and wipe stale completion fields!
-        const isNewMessageAfterDone = !hasCatering && (isDone || completedAt > 0) && isCustomerMessage && (completedAt <= 0 || lastMsgTime > completedAt || t.unreadForRider === true);
+        const isNewMessageAfterDone = !hasCatering && 
+            isDone && 
+            isCustomerMessage && 
+            t.unreadForRider === true && 
+            completedAt > 0 && 
+            lastMsgTime > (completedAt + 3000);
 
         if (isNewMessageAfterDone) {
             t.status = 'active';
