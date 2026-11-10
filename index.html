@@ -84,6 +84,19 @@
 
                 if ((riderId || riderName) && (!role || role === 'rider')) {
                     document.documentElement.classList.add('instant-session-home');
+                    var uiMode = localStorage.getItem('lokalex_ui_mode');
+                    if (uiMode === 'classic') {
+                        document.documentElement.classList.add('instant-session-classic');
+                    } else {
+                        document.documentElement.classList.add('instant-session-modern');
+                        var modTheme = localStorage.getItem('lokalex_modern_theme') || 'dark';
+                        if (modTheme === 'dark') {
+                            document.documentElement.classList.remove('light');
+                            document.documentElement.classList.add('dark');
+                            document.documentElement.style.backgroundColor = '#0b1114';
+                            document.documentElement.style.colorScheme = 'dark';
+                        }
+                    }
                 } else if (custFbId && role === 'customer') {
                     document.documentElement.classList.add('instant-session-customer');
                 } else if (merchId && role === 'merchant') {
@@ -94,7 +107,10 @@
     </script>
     <style>
         html.instant-session-home:not(.app-mounted) #view-login { display: none !important; }
-        html.instant-session-home:not(.app-mounted) #view-home:not(.hidden) { display: flex !important; }
+        html.instant-session-classic:not(.app-mounted) #view-home:not(.hidden) { display: flex !important; }
+        html.instant-session-modern:not(.app-mounted) #modern-ui-workspace { display: flex !important; }
+        html.instant-session-modern:not(.app-mounted) #view-home { display: none !important; }
+        html.instant-session-modern:not(.app-mounted) #app-header { display: none !important; }
         html.instant-session-home #view-home.hidden { display: none !important; }
         html.instant-session-customer:not(.app-mounted) #view-login { display: none !important; }
         html.instant-session-customer:not(.app-mounted) #view-customer-home:not(.hidden) { display: flex !important; }

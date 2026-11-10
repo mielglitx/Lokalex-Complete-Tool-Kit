@@ -394,7 +394,9 @@ export function renderViewUI(targetViewId) {
             if (headerTitle) headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
             syncRiderAppDockPermissions();
 
-            const isModern = (typeof localStorage !== 'undefined') && localStorage.getItem('lokalex_ui_mode') === 'modern';
+            const isModern = (typeof window.isModernUiActive === 'function')
+                ? window.isModernUiActive()
+                : ((typeof localStorage !== 'undefined') && localStorage.getItem('lokalex_ui_mode') !== 'classic');
             if (isModern) {
                 const modernWorkspace = document.getElementById('modern-ui-workspace');
                 if (modernWorkspace) modernWorkspace.classList.remove('hidden');
@@ -403,6 +405,11 @@ export function renderViewUI(targetViewId) {
                 if (window.applyLokalexUiMode) {
                     window.applyLokalexUiMode('modern', false);
                 }
+            } else {
+                const modernWorkspace = document.getElementById('modern-ui-workspace');
+                if (modernWorkspace) modernWorkspace.classList.add('hidden');
+                if (targetEl) targetEl.classList.remove('hidden');
+                if (appHeader) appHeader.classList.remove('hidden');
             }
         } else if (targetViewId === 'view-customer-home' && headerTitle) {
             headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Customer Portal`;
@@ -478,6 +485,8 @@ window.addEventListener('popstate', function(event) {
         { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
         { id: 'slide-delete-modal', closeFn: window.closeSlideDeleteModal },
         { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
+        { id: 'modern-quick-dayoff-modal', closeFn: window.closeModernQuickDayOffModal },
+        { id: 'modern-hamburger-popover', closeFn: window.closeModernHamburgerMenu },
         { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal }
     ];
 

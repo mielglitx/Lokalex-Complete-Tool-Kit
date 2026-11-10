@@ -98,12 +98,13 @@ export function isInspectorUser(uType, rId = '', rName = '') {
 // ============================================================================
 
 export function isModernUiActive() {
-    if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem('lokalex_ui_mode') === 'modern';
+    if (typeof localStorage === 'undefined') return true;
+    // New UI is now the main UI by default unless explicitly set to 'classic'
+    return localStorage.getItem('lokalex_ui_mode') !== 'classic';
 }
 
 export function toggleLokalexUiMode(targetMode = null) {
-    const current = localStorage.getItem('lokalex_ui_mode') || 'classic';
+    const current = isModernUiActive() ? 'modern' : 'classic';
     let newMode = targetMode;
     if (!newMode) {
         newMode = current === 'modern' ? 'classic' : 'modern';
@@ -114,7 +115,7 @@ export function toggleLokalexUiMode(targetMode = null) {
 }
 
 export function applyLokalexUiMode(mode = null, notify = false) {
-    const activeMode = mode || localStorage.getItem('lokalex_ui_mode') || 'classic';
+    const activeMode = mode || (isModernUiActive() ? 'modern' : 'classic');
     const modernWorkspace = document.getElementById('modern-ui-workspace');
     const appHeader = document.getElementById('app-header');
     const homeView = document.getElementById('view-home');
@@ -394,7 +395,8 @@ export function openModernMenuCategory(catKey) {
             { icon: "fa-text-height text-sky-400", label: "View / Font size", desc: "Adjust app display scale & font size", action: () => { closeModernHamburgerMenu(); window.openProfileSettingsModal && window.openProfileSettingsModal(); } },
             { icon: "fa-user-pen text-emerald-400", label: "Profile", desc: "Edit personal details & avatar", action: () => { closeModernHamburgerMenu(); window.handleHeaderUserClick && window.handleHeaderUserClick(); } },
             { icon: "fa-key text-amber-400", label: "Security", desc: "Change PIN code & password", action: () => { closeModernHamburgerMenu(); window.openRiderPasswordModal && window.openRiderPasswordModal(); } },
-            { icon: "fa-wallet text-blue-400", label: "GCash", desc: "Configure GCash account number & QR", action: () => { closeModernHamburgerMenu(); window.openGCashModal && window.openGCashModal(); } }
+            { icon: "fa-wallet text-blue-400", label: "GCash", desc: "Configure GCash account number & QR", action: () => { closeModernHamburgerMenu(); window.openGCashModal && window.openGCashModal(); } },
+            { icon: "fa-arrow-right-arrow-left text-slate-400", label: "Classic UI", desc: "Switch back to the classic single-column layout", action: () => { closeModernHamburgerMenu(); toggleLokalexUiMode('classic'); } }
         ];
     } else if (catKey === 'actions') {
         title = "Actions";
@@ -2392,10 +2394,18 @@ export function initModernTheme() {
 // ============================================================================
 
 export function initModernUiController() {
+    // One-time automatic migration: transition existing devices to New UI as the main UI
+    try {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('lokalex_main_ui_v2') !== 'true') {
+            localStorage.setItem('lokalex_ui_mode', 'modern');
+            localStorage.setItem('lokalex_main_ui_v2', 'true');
+        }
+    } catch (_) {}
+
     // Check initial mode from localStorage
     initModernTheme();
-    const savedMode = localStorage.getItem('lokalex_ui_mode') || 'classic';
-    if (savedMode === 'modern') {
+    const activeMode = isModernUiActive() ? 'modern' : 'classic';
+    if (activeMode === 'modern') {
         applyLokalexUiMode('modern', false);
     }
 

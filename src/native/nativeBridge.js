@@ -71,6 +71,8 @@ export async function initNativeBridge() {
                 { id: 'ota-update-selector-modal', closeFn: window.closeOtaUpdateSelectorModal },
                 { id: 'slide-delete-modal', closeFn: window.closeSlideDeleteModal },
                 { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
+                { id: 'modern-quick-dayoff-modal', closeFn: window.closeModernQuickDayOffModal },
+                { id: 'modern-hamburger-popover', closeFn: window.closeModernHamburgerMenu },
                 { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal }
             ];
 
