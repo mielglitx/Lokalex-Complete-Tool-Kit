@@ -494,6 +494,18 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     if (typeof window.refreshCommissionView === 'function') {
         window.refreshCommissionView();
     }
+
+    // If the completed customer was catered by the logged-in rider, navigate to Inbox
+    if (resolvedTargetId === myId || (resolvedTargetName && myName && resolvedTargetName.toLowerCase() === myName.toLowerCase())) {
+        const isModern = typeof window.isModernUiActive === 'function' && window.isModernUiActive();
+        if (isModern) {
+            if (typeof window.switchModernWorkspaceTab === 'function') window.switchModernWorkspaceTab('chats');
+            if (typeof window.selectModernChatCategory === 'function') window.selectModernChatCategory('inbox');
+        } else {
+            if (typeof window.setRiderChatFilter === 'function') window.setRiderChatFilter('inbox');
+        }
+    }
+
     return true;
 }
 

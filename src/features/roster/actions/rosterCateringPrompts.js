@@ -373,6 +373,7 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
             };
 
             const targetChatId = overrideCustId || (custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null) : null);
+            let resolvedTargetChatId = targetChatId;
 
             if (targetChatId) {
                 applyChatCaterUpdate(targetChatId);
@@ -400,6 +401,7 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                         const matchesMeta = !hasFbName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
 
                         if (matchesFb || matchesMeta) {
+                            if (!resolvedTargetChatId) resolvedTargetChatId = custId;
                             applyChatCaterUpdate(custId);
                             if (typeof window.triggerAutoMessageOnCater === 'function') {
                                 window.triggerAutoMessageOnCater(custId, custName, myName);
@@ -413,9 +415,27 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
             }
         }
 
-        // Switch to the catering filter so rider immediately sees customer thread
-        if (typeof window.setRiderChatFilter === 'function') {
-            window.setRiderChatFilter('catering');
+        closeCateringModal();
+
+        // Switch to the catering tab / category and immediately load the customer chat room
+        const isModern = typeof window.isModernUiActive === 'function' && window.isModernUiActive();
+        if (isModern) {
+            if (typeof window.switchModernWorkspaceTab === 'function') {
+                window.switchModernWorkspaceTab('chats');
+            }
+            if (typeof window.selectModernChatCategory === 'function') {
+                window.selectModernChatCategory('catering');
+            }
+            if (typeof window.selectModernCustomerChat === 'function') {
+                window.selectModernCustomerChat(resolvedTargetChatId || custName, custName);
+            }
+        } else {
+            if (typeof window.setRiderChatFilter === 'function') {
+                window.setRiderChatFilter('catering');
+            }
+            if (typeof window.openRiderCustomerChatModal === 'function') {
+                window.openRiderCustomerChatModal(resolvedTargetChatId || custName, custName);
+            }
         }
 
         // Immediately sync smart carts and bind customer to their dedicated cart slot

@@ -146,6 +146,13 @@ export function applyLokalexUiMode(mode = null, notify = false) {
             if (appHeader) appHeader.classList.remove('hidden');
             if (homeView) homeView.classList.remove('hidden');
         }
+        // Restore Classic UI saved theme
+        const savedClassicTheme = localStorage.getItem('lokalex_theme_preference') || localStorage.getItem('lokalex_theme') || 'light';
+        if (typeof window.applyTheme === 'function') {
+            window.applyTheme(savedClassicTheme, false);
+        } else if (typeof applyTheme === 'function') {
+            applyTheme(savedClassicTheme, false);
+        }
         // Force release any lingering body scroll lock when switching to Classic UI
         if (typeof document !== 'undefined' && document.body) {
             document.body.classList.remove('overflow-hidden', 'touch-none');
@@ -516,20 +523,28 @@ export function refreshCurrentTab() {
     if (modernActiveTab === 'chats') {
         const activeCustId = getActiveRiderChatCustId();
         const filtered = getModernFilteredThreads();
-        const stillExists = activeCustId && filtered.some(t => (t.custId || t.id) === activeCustId);
+        const cleanActive = String(activeCustId || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+        const stillExists = cleanActive && filtered.some(t => {
+            const cleanT = String(t.custId || t.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+            return cleanT && cleanT === cleanActive;
+        });
 
         if (stillExists) {
             renderModernChatLeftList();
-            syncModernRightChatRoom();
+            if (!isCateringChatRoomLocked(activeCustId)) {
+                syncModernRightChatRoom();
+            }
         } else {
-            if (filtered.length > 0) {
+            if (!activeCustId && filtered.length > 0) {
                 const first = filtered[0];
                 const cid = first.custId || first.id;
                 const name = formatTitleCase(first.customerName || first.name || "Customer");
                 const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
                 selectModernCustomerChat(cid, name, avatar);
-            } else {
+            } else if (!activeCustId) {
                 clearModernChatRightRoom();
+                renderModernChatLeftList();
+            } else {
                 renderModernChatLeftList();
             }
         }
@@ -827,15 +842,18 @@ export function renderModernChatLeftList() {
         return;
     }
 
+    const cleanActiveId = String(activeCustId || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+
     listContainer.innerHTML = filtered.map(t => {
-        const isSelected = activeCustId && (t.custId === activeCustId || t.id === activeCustId);
+        const cid = t.custId || t.id;
+        const cleanCid = String(cid || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+        const isSelected = cleanActiveId && (cid === activeCustId || cleanCid === cleanActiveId);
         const isMine = isMyCustomerThread(t, loggedInAuth);
         const isCateringCategory = modernChatCategory === 'catering';
         const isInboxCategory = modernChatCategory === 'inbox' || (t.folder || '').toLowerCase() === 'inbox';
         const isMyCateredCustomer = !isInboxCategory && isMine && (isCateringCategory || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
         const name = formatTitleCase(t.customerName || t.name || "Customer");
         const msg = (t.lastMessage || 'No messages yet').replace(/\[Facebook.*?\]/g, '📷 Photo');
-        const cid = t.custId || t.id;
         const avatar = t.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
 
         const hasNewMessage = Boolean(t.isUnread || t.unreadForRider === true || (t.unreadForRider !== false && t.lastMessage && !t.lastMessage.startsWith('You:')));
@@ -920,11 +938,23 @@ if (typeof window !== 'undefined') {
 
 export function isCateringChatRoomLocked(custId, thread = null) {
     if (!custId) return false;
-    if (unlockedCateringChatRooms.has(custId)) return false;
+    const cleanId = String(custId).replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+    if (unlockedCateringChatRooms.has(custId) || unlockedCateringChatRooms.has(cleanId) || unlockedCateringChatRooms.has(`fb_${cleanId}`)) return false;
 
     let t = thread;
     if (!t && cachedCustomerThreadsMap) {
-        t = cachedCustomerThreadsMap.get(custId) || cachedCustomerThreadsMap.get(`fb_${custId}`) || cachedCustomerThreadsMap.get(String(custId).replace(/^fb_/, ''));
+        t = cachedCustomerThreadsMap.get(custId) ||
+            cachedCustomerThreadsMap.get(`fb_${cleanId}`) ||
+            cachedCustomerThreadsMap.get(cleanId);
+        if (!t) {
+            for (const th of cachedCustomerThreadsMap.values()) {
+                const thCid = String(th.custId || th.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+                if (thCid && thCid === cleanId) {
+                    t = th;
+                    break;
+                }
+            }
+        }
     }
     if (!t) return false;
 
@@ -942,11 +972,8 @@ export function isCateringChatRoomLocked(custId, thread = null) {
 
 export function renderModernLockedCateringRoom(targetCustId, targetName, targetAvatar) {
     try {
-        if (typeof closeRiderCustomerChatModal === 'function') {
-            closeRiderCustomerChatModal();
-        } else if (typeof window.closeRiderCustomerChatModal === 'function') {
-            window.closeRiderCustomerChatModal();
-        }
+        if (typeof window.stopChatPresence === 'function') window.stopChatPresence();
+        if (typeof window.stopFbGraphPolling === 'function') window.stopFbGraphPolling();
     } catch (_) {}
 
     if (typeof setActiveRiderChatCustId === 'function') {
@@ -957,7 +984,14 @@ export function renderModernLockedCateringRoom(targetCustId, targetName, targetA
     }
 
     const allThreads = Array.from(cachedCustomerThreadsMap?.values() || []);
-    const t = cachedCustomerThreadsMap?.get(targetCustId) || cachedCustomerThreadsMap?.get(`fb_${targetCustId}`) || allThreads.find(th => (th.custId || th.id) === targetCustId);
+    const cleanTargetId = String(targetCustId || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+    const t = cachedCustomerThreadsMap?.get(targetCustId) ||
+              cachedCustomerThreadsMap?.get(`fb_${cleanTargetId}`) ||
+              cachedCustomerThreadsMap?.get(cleanTargetId) ||
+              allThreads.find(th => {
+                  const thCid = String(th.custId || th.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+                  return thCid && thCid === cleanTargetId;
+              });
     const activeCaterer = t ? getActiveRosterCaterer(t.customerName, t.custId, t) : null;
     const catererName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name) : (t?.cateredByRiderName || t?.cateredBy || "Another Rider");
 
@@ -1021,8 +1055,15 @@ export function renderModernLockedCateringRoom(targetCustId, targetName, targetA
 
 export function unlockCateringChatRoom(custId, name, avatar) {
     if (!custId) return;
+    const cleanId = String(custId).replace(/^(?:fb_|messenger_)+/i, '');
     unlockedCateringChatRooms.add(custId);
-    selectModernCustomerChat(custId, name, avatar);
+    unlockedCateringChatRooms.add(cleanId);
+    unlockedCateringChatRooms.add(`fb_${cleanId}`);
+    if (typeof window.isModernUiActive === 'function' && window.isModernUiActive()) {
+        selectModernCustomerChat(custId, name, avatar);
+    } else if (typeof window.openRiderCustomerChatModal === 'function') {
+        window.openRiderCustomerChatModal(custId, name, avatar);
+    }
 }
 
 export function selectModernCustomerChat(custId, custName, avatarUrl) {
@@ -1032,18 +1073,31 @@ export function selectModernCustomerChat(custId, custName, avatarUrl) {
     let targetName = custName || custId;
     let targetAvatar = avatarUrl;
 
-    // Resolve true thread custId if a customer name or raw name was passed (e.g., from Rider Rotation tab)
+    // Resolve true thread custId: First by exact/normalized ID match, and only fallback to customerName if ID not found
     const allThreads = Array.from(cachedCustomerThreadsMap?.values() || []);
-    if (!allThreads.some(t => (t.custId || t.id) === targetCustId)) {
+    const cleanTargetId = String(targetCustId || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+
+    const idMatched = allThreads.find(t => {
+        const thCid = String(t.custId || t.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+        return thCid && thCid === cleanTargetId;
+    });
+
+    if (idMatched) {
+        targetCustId = idMatched.custId || idMatched.id || targetCustId;
+        targetName = idMatched.customerName || idMatched.name || targetName;
+        targetAvatar = targetAvatar || idMatched.avatarUrl;
+    } else {
         const normTarget = String(targetCustId).trim().toLowerCase();
-        const matched = allThreads.find(t => {
-            const tName = (t.customerName || t.name || '').trim().toLowerCase();
-            return tName && (tName === normTarget || tName.includes(normTarget) || normTarget.includes(tName));
-        });
-        if (matched) {
-            targetCustId = matched.custId || matched.id;
-            targetName = matched.customerName || matched.name || targetName;
-            targetAvatar = targetAvatar || matched.avatarUrl;
+        if (normTarget && normTarget !== 'customer' && normTarget !== 'customer name') {
+            const matched = allThreads.find(t => {
+                const tName = (t.customerName || t.name || '').trim().toLowerCase();
+                return tName && (tName === normTarget || (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, normTarget)));
+            });
+            if (matched) {
+                targetCustId = matched.custId || matched.id;
+                targetName = matched.customerName || matched.name || targetName;
+                targetAvatar = targetAvatar || matched.avatarUrl;
+            }
         }
     }
 
@@ -1153,6 +1207,10 @@ export function syncModernRightChatRoom() {
 
     if (!custId) {
         clearModernChatRightRoom();
+        return;
+    }
+
+    if (isCateringChatRoomLocked(custId)) {
         return;
     }
 
@@ -2253,8 +2311,20 @@ export function applyModernTheme(theme = null, notify = false) {
     const btn = document.getElementById('modern-theme-toggle-btn');
     if (!workspace) return;
 
+    const root = document.documentElement;
+
     if (targetTheme === 'light') {
         workspace.classList.add('modern-theme-light');
+        if (root) {
+            root.classList.remove('dark');
+            root.classList.add('light');
+            root.style.backgroundColor = '#EDF7F2';
+            root.style.colorScheme = 'light';
+        }
+        if (document.body) {
+            document.body.style.backgroundColor = '#EDF7F2';
+            document.body.style.color = '#0F172A';
+        }
         if (icon) {
             icon.className = 'fa-solid fa-moon text-slate-700';
         }
@@ -2263,6 +2333,16 @@ export function applyModernTheme(theme = null, notify = false) {
         }
     } else {
         workspace.classList.remove('modern-theme-light');
+        if (root) {
+            root.classList.add('dark');
+            root.classList.remove('light');
+            root.style.backgroundColor = '#0b1114';
+            root.style.colorScheme = 'dark';
+        }
+        if (document.body) {
+            document.body.style.backgroundColor = '#0b1114';
+            document.body.style.color = '#F8FAFC';
+        }
         if (icon) {
             icon.className = 'fa-solid fa-sun text-amber-400';
         }
@@ -2358,22 +2438,30 @@ export function refreshModernChatsView() {
     if (modernActiveTab === 'chats') {
         const activeCustId = getActiveRiderChatCustId();
         const filtered = getModernFilteredThreads();
-        const stillExists = activeCustId && filtered.some(t => (t.custId || t.id) === activeCustId);
+        const cleanActive = String(activeCustId || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+        const stillExists = cleanActive && filtered.some(t => {
+            const cleanT = String(t.custId || t.id || '').replace(/^(?:fb_|messenger_)+/i, '').trim().toLowerCase();
+            return cleanT && cleanT === cleanActive;
+        });
 
         if (!stillExists) {
-            if (filtered.length > 0) {
+            if (!activeCustId && filtered.length > 0) {
                 const first = filtered[0];
                 const cid = first.custId || first.id;
                 const name = formatTitleCase(first.customerName || first.name || "Customer");
                 const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
                 selectModernCustomerChat(cid, name, avatar);
-            } else {
+            } else if (!activeCustId) {
                 clearModernChatRightRoom();
+                renderModernChatLeftList();
+            } else {
                 renderModernChatLeftList();
             }
         } else {
             renderModernChatLeftList();
-            syncModernRightChatRoom();
+            if (!isCateringChatRoomLocked(activeCustId)) {
+                syncModernRightChatRoom();
+            }
         }
     }
 }

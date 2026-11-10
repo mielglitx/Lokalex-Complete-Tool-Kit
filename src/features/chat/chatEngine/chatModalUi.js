@@ -54,6 +54,11 @@ export function renderClassicLockedChatModal(custId, custName, avatarUrl) {
     modal.classList.remove('hidden');
     toggleBodyScroll(true);
 
+    setActiveRiderChatCustId(custId);
+    if (typeof window !== 'undefined') {
+        window.activeRiderChatCustId = custId;
+    }
+
     const nameEl = document.getElementById('rider-chat-cust-name');
     const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
     if (nameEl) nameEl.innerText = custName || "Customer";
@@ -128,18 +133,30 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         const map = window.getCachedCustomerThreadsMap();
         if (map && !map.has(targetCustId)) {
             const cleanTarget = String(targetCustId).trim().toLowerCase();
+            const cleanTargetIdOnly = cleanTarget.replace(/^(?:fb_|messenger_)+/i, '');
+
+            // 1. First priority: match exact or normalized ID
             for (const t of map.values()) {
-                const tName = (t.customerName || t.name || '').trim().toLowerCase();
-                const tId = t.custId || t.id;
-                if (tId === targetCustId) {
-                    targetCustId = tId;
-                    break;
-                }
-                if (tName && (tName === cleanTarget || tName.includes(cleanTarget) || cleanTarget.includes(tName))) {
-                    targetCustId = tId;
+                const tId = String(t.custId || t.id || '').trim().toLowerCase();
+                const cleanTId = tId.replace(/^(?:fb_|messenger_)+/i, '');
+                if (tId === cleanTarget || (cleanTargetIdOnly && cleanTId === cleanTargetIdOnly)) {
+                    targetCustId = t.custId || t.id;
                     if (!targetCustName || targetCustName === custId) targetCustName = t.customerName || t.name;
                     if (!targetAvatar) targetAvatar = t.avatarUrl;
                     break;
+                }
+            }
+
+            // 2. Fallback: match by customer name only if targetCustId is not found as ID
+            if (targetCustId === custId && cleanTarget && cleanTarget !== 'customer' && cleanTarget !== 'customer name') {
+                for (const t of map.values()) {
+                    const tName = (t.customerName || t.name || '').trim().toLowerCase();
+                    if (tName && (tName === cleanTarget || (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, cleanTarget)))) {
+                        targetCustId = t.custId || t.id;
+                        if (!targetCustName || targetCustName === custId) targetCustName = t.customerName || t.name;
+                        if (!targetAvatar) targetAvatar = t.avatarUrl;
+                        break;
+                    }
                 }
             }
         }

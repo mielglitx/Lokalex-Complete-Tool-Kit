@@ -400,6 +400,15 @@ export async function confirmAndExecuteDone() {
             window.closeRiderCustomerChatModal();
         }
         showToast(`✅ Marked ${custName || matchingCustNameOnRoster} as Completed!`);
+
+        // Switch to Inbox so rider can immediately see pending orders
+        const isModern = typeof window.isModernUiActive === 'function' && window.isModernUiActive();
+        if (isModern) {
+            if (typeof window.switchModernWorkspaceTab === 'function') window.switchModernWorkspaceTab('chats');
+            if (typeof window.selectModernChatCategory === 'function') window.selectModernChatCategory('inbox');
+        } else {
+            if (typeof window.setRiderChatFilter === 'function') window.setRiderChatFilter('inbox');
+        }
         return;
     }
 
@@ -490,6 +499,15 @@ export async function executeThreadDone(targetCustId = null, targetCustName = ""
     document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');
     showToast("✅ Moved chat to Done!");
     if (!targetCustId && window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
+
+    // Switch to Inbox so rider can immediately see pending orders
+    const isModern = typeof window.isModernUiActive === 'function' && window.isModernUiActive();
+    if (isModern) {
+        if (typeof window.switchModernWorkspaceTab === 'function') window.switchModernWorkspaceTab('chats');
+        if (typeof window.selectModernChatCategory === 'function') window.selectModernChatCategory('inbox');
+    } else {
+        if (typeof window.setRiderChatFilter === 'function') window.setRiderChatFilter('inbox');
+    }
 }
 
 /**
@@ -890,8 +908,16 @@ export async function caterCurrentChatCustomer() {
 
     if (typeof window.confirmCateringStatus === 'function') {
         const res = await window.confirmCateringStatus(custName, custId);
-        if (res && typeof window.setRiderChatFilter === 'function') {
-            window.setRiderChatFilter('catering');
+        if (res) {
+            const isModern = typeof window.isModernUiActive === 'function' && window.isModernUiActive();
+            if (isModern) {
+                if (typeof window.switchModernWorkspaceTab === 'function') window.switchModernWorkspaceTab('chats');
+                if (typeof window.selectModernChatCategory === 'function') window.selectModernChatCategory('catering');
+                if (typeof window.selectModernCustomerChat === 'function') window.selectModernCustomerChat(custId, custName);
+            } else {
+                if (typeof window.setRiderChatFilter === 'function') window.setRiderChatFilter('catering');
+                if (typeof window.openRiderCustomerChatModal === 'function') window.openRiderCustomerChatModal(custId, custName);
+            }
         }
     } else {
         showToast("⚠️ Catering system unavailable.");
