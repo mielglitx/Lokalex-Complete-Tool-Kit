@@ -323,7 +323,11 @@ export function isMyCustomerThread(t, cachedAuth = null) {
 }
 
 export function getActiveRosterCaterer(custName, custId, meta = {}) {
-    if (meta?.status === 'cancelled' || meta?.status === 'completed' || meta?.folder === 'done') {
+    // Only respect recent explicit completion / cancellation (within 15s) to allow instant roster-driven completion.
+    // Old completed/done flags from past orders must NEVER prevent a new active catering assignment!
+    const completedAt = Number(meta?.completedAt) || 0;
+    const isRecentCompletion = completedAt > 0 && (Date.now() - completedAt < 15000);
+    if (isRecentCompletion && (meta?.folder === 'done' || meta?.status === 'completed' || meta?.status === 'cancelled')) {
         return null;
     }
 
@@ -367,13 +371,13 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
         if (matched) return matched;
     }
 
-    // 2. Strict Fallback: ONLY if thread is explicitly in the 'catering' folder (NEVER inbox or done)
-    // AND that assigned rider is currently 'Catering' on the roster AND customer matches
+    // 2. Fallback: If thread has active catering fields (cateredByRiderId or cateredByRiderName)
+    // AND that assigned rider is currently 'Catering' on the roster
     const threadFolder = (meta?.folder || '').toLowerCase();
     const isExplicitCateringFolder = threadFolder === 'catering';
-    const isInboxOrDone = threadFolder === 'inbox' || threadFolder === 'done' || meta?.status === 'completed' || meta?.status === 'done';
+    const isInboxOrDone = !isExplicitCateringFolder && (threadFolder === 'inbox' || (isRecentCompletion && (threadFolder === 'done' || meta?.status === 'completed' || meta?.status === 'done')));
 
-    if (isExplicitCateringFolder && !isInboxOrDone) {
+    if ((isExplicitCateringFolder || meta?.cateredByRiderId || meta?.cateredByRiderName) && !isInboxOrDone) {
         const metaRiderId = (meta?.cateredByRiderId || "").toString().trim();
         const metaRiderName = (meta?.cateredByRiderName || meta?.cateredBy || "").toString().trim().toLowerCase();
 

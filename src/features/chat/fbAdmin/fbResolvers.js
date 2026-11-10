@@ -399,6 +399,9 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                         );
                         if (isApplicant) continue;
 
+                        const isBeingCatered = (existingMeta.folder || '').toLowerCase() === 'catering' || Boolean(existingMeta.cateredByRiderId || existingMeta.cateredByRiderName || existingMeta.cateredBy);
+                        if (isBeingCatered) continue;
+
                         let targetFolder = 'inbox';
                         let targetStatus = 'active';
 

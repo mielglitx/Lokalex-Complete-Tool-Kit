@@ -721,20 +721,41 @@ export function getModernFilteredThreads(customCategory = null) {
             return name.includes(searchQ) || msg.includes(searchQ) || cid.includes(searchQ);
         }
 
-        const folder = (t.folder || 'inbox').toLowerCase();
-        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        const activeCaterer = (typeof getActiveRosterCaterer === 'function')
+            ? getActiveRosterCaterer(t.customerName, t.custId, t)
+            : null;
+        if (activeCaterer) {
+            t.folder = 'catering';
+            t.status = 'active';
+            t.completedAt = null;
+            t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+            t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+            t.cateredBy = t.cateredByRiderName;
+        }
 
-        // Stale caterer sanitization: If thread is marked inbox or is done, it cannot have active catering
-        if (folder === 'inbox' || isDone) {
+        const folder = (t.folder || 'inbox').toLowerCase();
+        const hasCatering = Boolean(activeCaterer || folder === 'catering' || t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+
+        if (hasCatering) {
+            t.folder = 'catering';
+            t.status = 'active';
+            t.completedAt = null;
+        }
+
+        const isDone = !hasCatering && (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || folder === 'done');
+
+        // Stale caterer sanitization: Only if thread is strictly in inbox or explicitly done without catering
+        if (!hasCatering && (folder === 'inbox' || isDone)) {
             t.cateredByRiderName = null;
             t.cateredByRiderId = null;
             t.cateredBy = null;
             t.isForcedCater = false;
         }
 
-        const isCatered = !isDone && (folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy));
+        const isCatered = hasCatering;
 
         if (cat === 'done') {
+            if (isCatered) return false;
             return folder === 'done' || isDone;
         }
         if (isDone) return false;
@@ -744,11 +765,11 @@ export function getModernFilteredThreads(customCategory = null) {
         } else if (cat === 'catering') {
             return isCatered;
         } else if (cat === 'applicant') {
-            return folder === 'applicant' || t.isApplicant === true;
+            return !isCatered && (folder === 'applicant' || t.isApplicant === true);
         } else if (cat === 'followup') {
-            return folder === 'followup';
+            return !isCatered && folder === 'followup';
         } else if (cat === 'stores') {
-            return folder === 'stores';
+            return !isCatered && folder === 'stores';
         }
         return true;
     });

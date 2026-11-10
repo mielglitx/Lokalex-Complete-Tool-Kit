@@ -1038,16 +1038,17 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
             if (isNew && isFromCustomer) {
                 const rawFolder = (currentRiderChatMeta?.folder || 'inbox').toLowerCase();
-                const isDone = rawFolder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done';
                 const custDisplayName = activeCustData?.name || currentRiderChatMeta?.customerName || "";
                 const activeCaterer = getActiveRosterCaterer(custDisplayName, custId, currentRiderChatMeta);
-                const isCatered = !isDone && (Boolean(activeCaterer) || rawFolder === 'catering');
+                const hasCaterFields = Boolean(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId);
+                const isCatered = Boolean(activeCaterer) || rawFolder === 'catering' || hasCaterFields;
+                const isDone = !isCatered && (rawFolder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done');
                 const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || currentRiderChatMeta?.isApplicant === true);
                 const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
                 let targetFolder = 'inbox';
-                if (isDone) targetFolder = 'done';
-                else if (isCatered) targetFolder = 'catering';
+                if (isCatered) targetFolder = 'catering';
+                else if (isDone) targetFolder = 'done';
                 else if (isApplicant) targetFolder = 'applicant';
                 else if (isFollowup) targetFolder = 'followup';
                 else targetFolder = 'inbox';

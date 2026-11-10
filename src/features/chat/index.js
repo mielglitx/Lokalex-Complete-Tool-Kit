@@ -226,26 +226,29 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
         // Standard folder filtering (inbox, applicant, done, etc.)
         filtered = allChats.filter(chat => {
             const meta = chat.metadata || chat;
-            const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy) && meta.status !== 'completed' && meta.status !== 'done' && meta.status !== 'cancelled';
+            const hasCaterFields = Boolean(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
             const folder = (meta.folder || 'inbox').toLowerCase();
+            const isCatered = hasCaterFields || folder === 'catering';
             
             if (targetFolder === 'inbox') {
                 if (isCatered || folder === 'catering') return false;
                 if (folder === 'applicant' || folder === 'followup' || meta.isApplicant) return false;
                 return folder === 'inbox';
             }
+            if (targetFolder === 'catering') {
+                return isCatered || folder === 'catering';
+            }
             if (targetFolder === 'applicant') {
+                if (isCatered) return false;
                 return folder === 'applicant' || meta.isApplicant === true;
             }
             if (targetFolder === 'followup') {
+                if (isCatered) return false;
                 return folder === 'followup' && !meta.isApplicant;
             }
             if (targetFolder === 'done') {
+                if (isCatered || folder === 'catering') return false;
                 if (folder === 'done' || meta.status === 'completed' || meta.status === 'done') return true;
-                // Do NOT classify a catering thread as Done just because the rider's live
-                // status briefly shows 'Available' — that is a transient rubberbanding artefact
-                // on bad signal. Only a folder='done' or explicit completion status moves a
-                // thread to Done.
                 return false;
             }
             return folder === targetFolder.toLowerCase();

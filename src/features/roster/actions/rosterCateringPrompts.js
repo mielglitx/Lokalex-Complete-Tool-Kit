@@ -336,6 +336,10 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 const updateObj = {
                     folder: 'catering',
                     status: 'active',
+                    completedAt: null,
+                    completedByRiderId: null,
+                    completedByRiderName: null,
+                    completedDate: null,
                     cateredByRiderId: resolvedId,
                     cateredByRiderName: myName,
                     cateredBy: myName,
@@ -354,19 +358,40 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 db.ref(`customerChats/${targetChatId}/metadata`).update(updateObj).catch(() => {});
                 db.ref(`customerChatMeta/${targetChatId}`).update(updateObj).catch(() => {});
 
+                // Also update alternate prefixed or normalized targetChatId in RTDB to avoid split records
+                const altChatId = targetChatId.toString().startsWith('fb_') 
+                    ? targetChatId.toString().replace(/^fb_/, '') 
+                    : `fb_${targetChatId}`;
+                if (altChatId && altChatId !== targetChatId) {
+                    db.ref(`customerChats/${altChatId}/metadata`).update(updateObj).catch(() => {});
+                    db.ref(`customerChatMeta/${altChatId}`).update(updateObj).catch(() => {});
+                }
+
                 // Immediately synchronize in-memory cachedCustomerThreadsMap
                 if (typeof window.getCachedCustomerThreadsMap === 'function') {
                     const threadMap = window.getCachedCustomerThreadsMap();
                     if (threadMap) {
-                        const t = threadMap.get(targetChatId) || threadMap.get(`fb_${targetChatId}`) || threadMap.get(targetChatId.toString().replace(/^fb_/, ''));
-                        if (t) {
-                            t.folder = 'catering';
-                            t.status = 'active';
-                            t.cateredByRiderId = resolvedId;
-                            t.cateredByRiderName = myName;
-                            t.cateredBy = myName;
-                            if (updateObj.customerName) t.customerName = updateObj.customerName;
-                            t.lastUpdated = updateObj.lastUpdated;
+                        const targetKeys = [
+                            targetChatId,
+                            `fb_${targetChatId}`,
+                            targetChatId.toString().replace(/^fb_/, ''),
+                            altChatId
+                        ];
+                        for (const k of targetKeys) {
+                            const t = threadMap.get(k);
+                            if (t) {
+                                t.folder = 'catering';
+                                t.status = 'active';
+                                t.completedAt = null;
+                                t.completedByRiderId = null;
+                                t.completedByRiderName = null;
+                                t.completedDate = null;
+                                t.cateredByRiderId = resolvedId;
+                                t.cateredByRiderName = myName;
+                                t.cateredBy = myName;
+                                if (updateObj.customerName) t.customerName = updateObj.customerName;
+                                t.lastUpdated = updateObj.lastUpdated;
+                            }
                         }
                     }
                 }
@@ -398,7 +423,7 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                         const hasFbName = Boolean(fbName && fbName !== 'customer');
 
                         const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
-                        const matchesMeta = !hasFbName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
+                        const matchesMeta = chatCustName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
 
                         if (matchesFb || matchesMeta) {
                             if (!resolvedTargetChatId) resolvedTargetChatId = custId;

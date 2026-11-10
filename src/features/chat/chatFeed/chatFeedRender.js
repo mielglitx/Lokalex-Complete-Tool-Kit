@@ -146,6 +146,7 @@ function executeRenderRiderCustomerChatFeed() {
         if (liveActiveCaterer) {
             t.folder = 'catering';
             t.status = 'active';
+            t.completedAt = null;
             t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
             t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
             t.cateredBy = t.cateredByRiderName;
@@ -173,7 +174,15 @@ function executeRenderRiderCustomerChatFeed() {
             return;
         }
 
-        const isDone = (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
+        const hasCatering = Boolean(liveActiveCaterer || (t.folder || '').toLowerCase() === 'catering' || t.cateredByRiderName || t.cateredByRiderId);
+        if (hasCatering) {
+            t.folder = 'catering';
+            t.status = 'active';
+            t.completedAt = null;
+            return;
+        }
+
+        const isDone = !hasCatering && (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
         const completedAt = Number(t.completedAt) || 0;
         const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
         const isNewMessageAfterDone = isDone && (completedAt <= 0 || lastMsgTime >= completedAt) && t.unreadForRider === true && t.lastMessage && !t.lastMessage.startsWith('You:');
@@ -194,6 +203,7 @@ function executeRenderRiderCustomerChatFeed() {
             const activeCaterer = getFastCaterer(t.customerName, t.custId);
             if (activeCaterer) {
                 t.folder = 'catering';
+                t.completedAt = null;
                 t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
                 t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
                 t.cateredBy = t.cateredByRiderName;
@@ -206,7 +216,7 @@ function executeRenderRiderCustomerChatFeed() {
             return;
         }
 
-        const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        const isCompleted = !hasCatering && (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled');
         if (isCompleted) {
             t.folder = 'done';
             t.isUnread = false;
@@ -222,6 +232,7 @@ function executeRenderRiderCustomerChatFeed() {
         if (activeCaterer) {
             t.folder = 'catering';
             t.status = 'active';
+            t.completedAt = null;
             t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
             t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
             t.cateredBy = t.cateredByRiderName;
@@ -229,12 +240,26 @@ function executeRenderRiderCustomerChatFeed() {
             const hadStaleCaterer = !!(t.cateredByRiderName || t.cateredByRiderId);
             const wasInCatering = (t.folder || '').toLowerCase() === 'catering';
 
-            if (hadStaleCaterer || wasInCatering) {
+            // Check if assigned rider is still actively Catering on duty
+            const assignedRider = liveRoster.find(m => {
+                const mId = (m.telegramId || m.id || "").toString().trim();
+                const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+                const tRId = (t.cateredByRiderId || "").toString().trim();
+                const tRName = (t.cateredByRiderName || t.cateredBy || "").toString().trim().toLowerCase();
+                return (tRId && mId && tRId === mId) || (tRName && mName && (tRName === mName || isRiderMatch(mName, tRName)));
+            });
+
+            if (assignedRider && assignedRider.status === 'Catering') {
+                // Assigned rider is on-duty Catering: RETAIN catering status!
+                t.folder = 'catering';
+                t.status = 'active';
+                t.completedAt = null;
+            } else if (hadStaleCaterer || wasInCatering) {
                 t.cateredByRiderId = null;
                 t.cateredByRiderName = null;
                 t.cateredBy = null;
                 if (wasInCatering) {
-                    const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.completedAt;
+                    const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
                     t.folder = isFinished ? 'done' : (t.isApplicant ? 'applicant' : 'inbox');
                 }
             }
@@ -264,10 +289,11 @@ function executeRenderRiderCustomerChatFeed() {
 
         // Determine effective folder for this thread
         const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
-        const isCurrentlyCatered = Boolean(liveActiveCaterer) || (Boolean(t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'cancelled');
+        const isCurrentlyCatered = Boolean(liveActiveCaterer) || (t.folder || '').toLowerCase() === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId);
         if (isCurrentlyCatered) {
             t.folder = 'catering';
             t.status = 'active';
+            t.completedAt = null;
             if (liveActiveCaterer) {
                 t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
                 t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
@@ -312,15 +338,15 @@ function executeRenderRiderCustomerChatFeed() {
             return folder === 'inbox';
         }
         if (activeRiderChatFilter === 'catering') {
-            if (isCurrentlyCatered) return true;
-            return folder === 'catering' && t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled';
+            if (isCurrentlyCatered || folder === 'catering') return true;
+            return folder === 'catering';
         }
         if (activeRiderChatFilter === 'applicant') {
-            if (isCurrentlyCatered) return false;
+            if (isCurrentlyCatered || folder === 'catering') return false;
             return folder === 'applicant' || t.isApplicant === true;
         }
         if (activeRiderChatFilter === 'followup') {
-            if (isCurrentlyCatered) return false;
+            if (isCurrentlyCatered || folder === 'catering') return false;
             return folder === 'followup' && !t.isApplicant;
         }
         if (activeRiderChatFilter === 'done') {
