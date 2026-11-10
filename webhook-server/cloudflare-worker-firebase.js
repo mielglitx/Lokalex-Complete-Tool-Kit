@@ -815,6 +815,7 @@ async function processMetaEntries(entries, cfg, ctx) {
 
       // 1. Fast in-memory customer check (0ms) before hitting Firebase
       let existingCustomer = MEM_CUSTOMER_CACHE.get(custId);
+      const isCacheFresh = existingCustomer && (Date.now() - (existingCustomer.cachedAt || 0) < 15000);
       let existingCustomerName = existingCustomer?.customerName || null;
       let existingAvatarUrl = existingCustomer?.avatarUrl || null;
       let existingFolder = existingCustomer?.folder || null;
@@ -822,7 +823,7 @@ async function processMetaEntries(entries, cfg, ctx) {
       let existingCateredRiderId = existingCustomer?.cateredById || null;
       let existingStatus = existingCustomer?.status || null;
 
-      if (!existingCustomer) {
+      if (!isCacheFresh || !existingCustomer || !existingCateredRider) {
         try {
           const metaResp = await fetch(`${cfg.dbUrl}/customerChatMeta/${custId}.json`);
           if (metaResp.ok) {
@@ -843,7 +844,8 @@ async function processMetaEntries(entries, cfg, ctx) {
                 folder: existingFolder,
                 cateredBy: existingCateredRider,
                 cateredById: existingCateredRiderId,
-                status: existingStatus
+                status: existingStatus,
+                cachedAt: Date.now()
               });
             }
           }
@@ -1014,24 +1016,25 @@ async function processMetaEntries(entries, cfg, ctx) {
       }
 
       // 1. Thread Metadata Payload (Lokalex Live Chat Feed)
-      const isCurrentlyCatered = (existingFolder === 'catering') && Boolean(existingCateredRider || existingCateredRiderId) && existingStatus !== 'completed' && existingStatus !== 'done' && existingStatus !== 'cancelled';
+      const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
+      const isCurrentlyCatered = !isExistingDone && (existingFolder === 'catering' || Boolean(existingCateredRider || existingCateredRiderId)) && existingStatus !== 'cancelled';
       const resolvedFolder = isCurrentlyCatered 
         ? 'catering' 
-        : (existingFolder === 'followup' ? 'followup' : 'inbox');
+        : (existingFolder === 'followup' ? 'followup' : (existingFolder === 'stores' ? 'stores' : (existingFolder === 'applicant' ? 'applicant' : 'inbox')));
 
       let lastSummary = messageText;
       if (isLikeSticker) {
-        lastSummary = "≡ƒæì Liked";
+        lastSummary = "👍 Liked";
       } else if (images.length > 1) {
-        lastSummary = `≡ƒô╖ ${images.length} Photos`;
+        lastSummary = `📷 ${images.length} Photos`;
       } else if (images.length === 1 && (!item.message.text || !item.message.text.trim())) {
-        lastSummary = "≡ƒô╖ Photo";
+        lastSummary = "📷 Photo";
       } else if (videoUrl && (!item.message.text || !item.message.text.trim())) {
-        lastSummary = "≡ƒÄÑ Video";
+        lastSummary = "🎥 Video";
       } else if (audioUrl && (!item.message.text || !item.message.text.trim())) {
-        lastSummary = "≡ƒÄñ Voice message";
+        lastSummary = "🎤 Voice message";
       } else if (docUrl && (!item.message.text || !item.message.text.trim())) {
-        lastSummary = `≡ƒôä ${docName}`;
+        lastSummary = `📄 ${docName}`;
       }
 
       const threadMeta = {
@@ -1041,19 +1044,29 @@ async function processMetaEntries(entries, cfg, ctx) {
         lastUpdated: timestamp,
         folder: resolvedFolder,
         status: 'active',
+        completedAt: null,
+        completedByRiderId: null,
+        completedByRiderName: null,
+        completedBy: null,
         channel: "messenger",
         apiId: cfg.defaultApiId,
         apiName: cfg.defaultApiName,
         unreadForRider: true,
       };
       if (isCurrentlyCatered) {
+        threadMeta.folder = 'catering';
         if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
         if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
         threadMeta.cateredBy = existingCateredRider || null;
-      } else {
+      } else if (isExistingDone) {
+        threadMeta.folder = 'inbox';
         threadMeta.cateredByRiderName = null;
         threadMeta.cateredByRiderId = null;
         threadMeta.cateredBy = null;
+      } else {
+        if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
+        if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
+        if (existingCateredRider) threadMeta.cateredBy = existingCateredRider;
       }
 
       // 2. Chat Message Payload
@@ -1124,10 +1137,11 @@ async function processMetaEntries(entries, cfg, ctx) {
         MEM_CUSTOMER_CACHE.set(custId, {
           customerName: customerName,
           avatarUrl: avatarUrl,
-          folder: resolvedFolder,
+          folder: isCurrentlyCatered ? 'catering' : resolvedFolder,
           cateredBy: isCurrentlyCatered ? existingCateredRider : null,
           cateredById: isCurrentlyCatered ? existingCateredRiderId : null,
-          status: 'active'
+          status: 'active',
+          cachedAt: Date.now()
         });
 
         console.log(`ΓÜí Fast-path message from ${customerName} saved atomically to Firebase RTDB!`);

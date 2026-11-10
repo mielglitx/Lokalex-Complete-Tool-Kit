@@ -36,7 +36,7 @@ const CONFIG = {
   PAGE_ACCESS_TOKEN: "",
 
   // (Optional) Forward raw incoming webhooks to the existing Firebase worker so existing riders never miss a message:
-  FIREBASE_FORWARD_URL: "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/webhook"
+  FIREBASE_FORWARD_URL: ""
 };
 
 // Global in-memory caches across worker requests within warm isolates (0ms lookup)
@@ -1074,6 +1074,7 @@ async function processMetaEntries(entries, cfg, ctx) {
 
       // 1. Fast in-memory customer check (0ms)
       let existingCustomer = MEM_CUSTOMER_CACHE.get(custId);
+      const isCacheFresh = existingCustomer && (Date.now() - (existingCustomer.cachedAt || 0) < 15000);
       let existingCustomerName = existingCustomer?.customerName || null;
       let existingAvatarUrl = existingCustomer?.avatarUrl || null;
       let existingFolder = existingCustomer?.folder || null;
@@ -1082,8 +1083,8 @@ async function processMetaEntries(entries, cfg, ctx) {
       let existingStatus = existingCustomer?.status || null;
       let existingCustomerMeta = null;
 
-      // 1b. If not in memory, check Supabase customer_chat_meta
-      if (!existingCustomer && cfg.supabaseUrl && cfg.supabaseKey) {
+      // 1b. If not fresh or no caterer, check Supabase customer_chat_meta
+      if ((!isCacheFresh || !existingCustomer || !existingCateredRider) && cfg.supabaseUrl && cfg.supabaseKey) {
         try {
           const metaRow = await supabaseGetById(cfg.supabaseUrl, cfg.supabaseKey, "customer_chat_meta", custId);
           if (metaRow && metaRow.data) {
@@ -1104,7 +1105,8 @@ async function processMetaEntries(entries, cfg, ctx) {
               folder: existingFolder,
               cateredBy: existingCateredRider,
               cateredById: existingCateredRiderId,
-              status: existingStatus
+              status: existingStatus,
+              cachedAt: Date.now()
             });
           }
         } catch (_) {}
@@ -1257,10 +1259,11 @@ async function processMetaEntries(entries, cfg, ctx) {
       }
 
       // 4. Thread Metadata Payload
-      const isCurrentlyCatered = (existingFolder === 'catering') && Boolean(existingCateredRider || existingCateredRiderId) && existingStatus !== 'completed' && existingStatus !== 'done' && existingStatus !== 'cancelled';
+      const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
+      const isCurrentlyCatered = !isExistingDone && (existingFolder === 'catering' || Boolean(existingCateredRider || existingCateredRiderId)) && existingStatus !== 'cancelled';
       const resolvedFolder = isCurrentlyCatered 
         ? 'catering' 
-        : (existingFolder === 'followup' ? 'followup' : 'inbox');
+        : (existingFolder === 'followup' ? 'followup' : (existingFolder === 'stores' ? 'stores' : (existingFolder === 'applicant' ? 'applicant' : 'inbox')));
 
       let lastSummary = messageText;
       if (isLikeSticker) {
@@ -1277,7 +1280,6 @@ async function processMetaEntries(entries, cfg, ctx) {
         lastSummary = `📄 ${docName}`;
       }
 
-      const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
       const threadMeta = {
         ...(existingCustomerMeta || {}),
         customerName: customerName,
@@ -1291,14 +1293,26 @@ async function processMetaEntries(entries, cfg, ctx) {
         apiName: cfg.defaultApiName,
         unreadForRider: !isEcho,
       };
+      if (!isEcho) {
+        threadMeta.completedAt = null;
+        threadMeta.completedByRiderId = null;
+        threadMeta.completedByRiderName = null;
+        threadMeta.completedBy = null;
+      }
       if (isCurrentlyCatered) {
+        threadMeta.folder = 'catering';
         if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
         if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
         threadMeta.cateredBy = existingCateredRider || null;
-      } else {
+      } else if (isExistingDone) {
+        threadMeta.folder = isEcho ? 'done' : 'inbox';
         threadMeta.cateredByRiderName = null;
         threadMeta.cateredByRiderId = null;
         threadMeta.cateredBy = null;
+      } else {
+        if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
+        if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
+        if (existingCateredRider) threadMeta.cateredBy = existingCateredRider;
       }
 
       // 5. Chat Message Payload
@@ -1402,10 +1416,11 @@ async function processMetaEntries(entries, cfg, ctx) {
       MEM_CUSTOMER_CACHE.set(custId, {
         customerName: customerName,
         avatarUrl: avatarUrl,
-        folder: resolvedFolder,
+        folder: isCurrentlyCatered ? 'catering' : resolvedFolder,
         cateredBy: isCurrentlyCatered ? existingCateredRider : null,
         cateredById: isCurrentlyCatered ? existingCateredRiderId : null,
-        status: 'active'
+        status: 'active',
+        cachedAt: Date.now()
       });
 
       // 7. FULL BOOKING AUTO-REPLY HOOK (Supabase based)

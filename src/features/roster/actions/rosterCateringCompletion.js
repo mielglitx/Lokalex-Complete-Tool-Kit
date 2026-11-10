@@ -315,9 +315,19 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 };
                 try {
                     const safeKey = sanitizeFirebaseKey(targetChatId);
-                    if (safeKey) {
-                        db.ref(`customerChats/${safeKey}/metadata`).update(doneUpdate).catch(() => {});
-                        db.ref(`customerChatMeta/${safeKey}`).update(doneUpdate).catch(() => {});
+                    const cleanTargetStr = String(targetChatId || '').trim();
+                    const rawPsid = cleanTargetStr.replace(/^(?:fb_|messenger_|id_)+/i, '').trim();
+                    const keysToUpdate = new Set();
+                    if (safeKey) keysToUpdate.add(safeKey);
+                    if (cleanTargetStr) keysToUpdate.add(cleanTargetStr);
+                    if (rawPsid) {
+                        keysToUpdate.add(rawPsid);
+                        keysToUpdate.add(`fb_${rawPsid}`);
+                        keysToUpdate.add(`messenger_${rawPsid}`);
+                    }
+                    for (const k of keysToUpdate) {
+                        db.ref(`customerChats/${k}/metadata`).update(doneUpdate).catch(() => {});
+                        db.ref(`customerChatMeta/${k}`).update(doneUpdate).catch(() => {});
                     }
                 } catch (_) {}
             };
@@ -334,7 +344,12 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                     const now = Date.now();
                     for (const [tId, t] of threadMap.entries()) {
                         const chatName = (t.customerName || t.name || "").trim().toLowerCase();
-                        const isCustomerNameMatch = chatName && (chatName === targetLower || isCustomerMatch(chatName, targetLower));
+                        const isCustomerNameMatch = chatName && (
+                            chatName === targetLower || 
+                            chatName.startsWith(targetLower + ' ') || 
+                            targetLower.startsWith(chatName + ' ') || 
+                            (typeof isCustomerMatch === 'function' && isCustomerMatch(chatName, targetLower))
+                        );
                         const isCustIdMatch = cleanCustKey && (tId.toLowerCase().includes(cleanCustKey) || (t.custId && t.custId.toLowerCase().includes(cleanCustKey)));
                         const isMatch = isCustomerNameMatch || isCustIdMatch;
 
@@ -377,7 +392,12 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                     const isRiderMatch = (meta.cateredByRiderId && meta.cateredByRiderId.toString() === resolvedTargetId.toString()) ||
                                          (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === resolvedTargetName.trim().toLowerCase());
 
-                    if (chatCustName && (chatCustName === targetLower || isCustomerMatch(chatCustName, targetLower))) {
+                    if (chatCustName && (
+                        chatCustName === targetLower || 
+                        chatCustName.startsWith(targetLower + ' ') || 
+                        targetLower.startsWith(chatCustName + ' ') || 
+                        isCustomerMatch(chatCustName, targetLower)
+                    )) {
                         markChatCompleted(custId);
                     } else if (isRiderMatch && (cleanCustKey && custId.includes(cleanCustKey))) {
                         markChatCompleted(custId);

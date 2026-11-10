@@ -391,7 +391,12 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                             const tName = (t.customerName || t.name || '').trim().toLowerCase();
 
                             const matchesKey = keysToUpdate.has(k) || (rawPsid && (cleanK === rawPsid.toLowerCase() || tCustId === rawPsid.toLowerCase()));
-                            const matchesName = cleanSearchName && cleanSearchName !== 'customer' && (tName === cleanSearchName || (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, cleanSearchName)));
+                            const matchesName = cleanSearchName && cleanSearchName !== 'customer' && (
+                                tName === cleanSearchName || 
+                                tName.startsWith(cleanSearchName + ' ') || 
+                                cleanSearchName.startsWith(tName + ' ') || 
+                                (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, cleanSearchName))
+                            );
 
                             if (matchesKey || matchesName) {
                                 t.folder = 'catering';
@@ -437,8 +442,18 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                     const fbName = (resolvedFb?.name || "").toLowerCase().trim();
                     const hasFbName = Boolean(fbName && fbName !== 'customer');
 
-                    const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
-                    const matchesMeta = chatCustName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
+                    const matchesFb = hasFbName && (
+                        fbName === cleanSearchName || 
+                        fbName.startsWith(cleanSearchName + ' ') || 
+                        cleanSearchName.startsWith(fbName + ' ') || 
+                        isCustomerMatch(fbName, cleanSearchName)
+                    );
+                    const matchesMeta = chatCustName && (
+                        chatCustName === cleanSearchName || 
+                        chatCustName.startsWith(cleanSearchName + ' ') || 
+                        cleanSearchName.startsWith(chatCustName + ' ') || 
+                        isCustomerMatch(chatCustName, cleanSearchName)
+                    );
 
                     if (matchesFb || matchesMeta) {
                         if (!resolvedTargetChatId) resolvedTargetChatId = custId;

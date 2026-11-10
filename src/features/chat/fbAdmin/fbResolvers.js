@@ -418,8 +418,13 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                             targetStatus = 'active';
                         }
 
+                        const completedAt = Number(existingMeta.completedAt) || 0;
+                        const lastMsgTime = Number(existingMeta.lastUpdated) || 0;
+                        const rawLastMsg = (existingMeta.lastMessage || '').trim();
+                        const hasNewCustomerMsg = Boolean(rawLastMsg && !rawLastMsg.startsWith('You:') && (completedAt <= 0 || lastMsgTime > completedAt || existingMeta.unreadForRider === true));
+
                         // Check if already completed/done in Lokalex (e.g. from Clear Inbox or rider order completion)
-                        const isAlreadyDone = Boolean(
+                        const isAlreadyDone = !hasNewCustomerMsg && Boolean(
                             existingMeta.status === 'completed' ||
                             existingMeta.status === 'done' ||
                             existingMeta.status === 'cancelled' ||
@@ -439,6 +444,14 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
 
                         const currentFolder = (existingMeta.folder || 'inbox').toLowerCase();
                         const currentStatus = (existingMeta.status || 'active').toLowerCase();
+
+                        // Safeguard against Facebook Page sync dragging actively messaged or resurrected threads back to Done:
+                        if (targetFolder === 'done') {
+                            const isCurrentlyActiveInLokalex = (currentFolder === 'inbox' || currentFolder === 'catering') && currentStatus === 'active';
+                            if (isCurrentlyActiveInLokalex && (hasNewCustomerMsg || existingMeta.unreadForRider === true)) {
+                                continue;
+                            }
+                        }
 
                         if (currentFolder !== targetFolder || currentStatus !== targetStatus) {
                             const now = Date.now();

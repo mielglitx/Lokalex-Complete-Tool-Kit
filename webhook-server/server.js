@@ -707,6 +707,7 @@ app.post('/webhook', async (req, res) => {
 
         // 1. Fast in-memory customer check (0ms) before hitting Firebase
         let existingCustomer = MEM_CUSTOMER_CACHE.get(custId);
+        const isCacheFresh = existingCustomer && (Date.now() - (existingCustomer.cachedAt || 0) < 15000);
         let existingCustomerName = existingCustomer?.customerName || null;
         let existingAvatarUrl = existingCustomer?.avatarUrl || null;
         let existingFolder = existingCustomer?.folder || null;
@@ -714,7 +715,7 @@ app.post('/webhook', async (req, res) => {
         let existingCateredRiderId = existingCustomer?.cateredById || null;
         let existingStatus = existingCustomer?.status || null;
 
-        if (!existingCustomer) {
+        if (!isCacheFresh || !existingCustomer || !existingCateredRider) {
           try {
             const metaResp = await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}.json`);
             if (metaResp.ok) {
@@ -735,7 +736,8 @@ app.post('/webhook', async (req, res) => {
                   folder: existingFolder,
                   cateredBy: existingCateredRider,
                   cateredById: existingCateredRiderId,
-                  status: existingStatus
+                  status: existingStatus,
+                  cachedAt: Date.now()
                 });
               }
             }
@@ -905,10 +907,11 @@ app.post('/webhook', async (req, res) => {
           }
         }
 
-        const isCurrentlyCatered = (existingFolder === 'catering') && Boolean(existingCateredRider || existingCateredRiderId) && existingStatus !== 'completed' && existingStatus !== 'done' && existingStatus !== 'cancelled';
+        const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
+        const isCurrentlyCatered = !isExistingDone && (existingFolder === 'catering' || Boolean(existingCateredRider || existingCateredRiderId)) && existingStatus !== 'cancelled';
         const resolvedFolder = isCurrentlyCatered 
           ? 'catering' 
-          : (existingFolder === 'followup' ? 'followup' : 'inbox');
+          : (existingFolder === 'followup' ? 'followup' : (existingFolder === 'stores' ? 'stores' : (existingFolder === 'applicant' ? 'applicant' : 'inbox')));
 
         let lastSummary = messageText;
         if (isLikeSticker) {
@@ -935,16 +938,26 @@ app.post('/webhook', async (req, res) => {
           channel: "messenger",
           apiId: DEFAULT_API_ID,
           apiName: DEFAULT_API_NAME,
+          completedAt: null,
+          completedByRiderId: null,
+          completedByRiderName: null,
+          completedBy: null,
           unreadForRider: true
         };
         if (isCurrentlyCatered) {
+          threadMeta.folder = 'catering';
           if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
           if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
           threadMeta.cateredBy = existingCateredRider || null;
-        } else {
+        } else if (isExistingDone) {
+          threadMeta.folder = 'inbox';
           threadMeta.cateredByRiderName = null;
           threadMeta.cateredByRiderId = null;
           threadMeta.cateredBy = null;
+        } else {
+          if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
+          if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
+          if (existingCateredRider) threadMeta.cateredBy = existingCateredRider;
         }
 
         const chatMsg = {
@@ -1014,10 +1027,11 @@ app.post('/webhook', async (req, res) => {
           MEM_CUSTOMER_CACHE.set(custId, {
             customerName: customerName,
             avatarUrl: avatarUrl,
-            folder: resolvedFolder,
+            folder: isCurrentlyCatered ? 'catering' : resolvedFolder,
             cateredBy: isCurrentlyCatered ? existingCateredRider : null,
             cateredById: isCurrentlyCatered ? existingCateredRiderId : null,
-            status: 'active'
+            status: 'active',
+            cachedAt: Date.now()
           });
 
           console.log(`⚡ Fast-path message from ${customerName} saved atomically to Firebase!`);

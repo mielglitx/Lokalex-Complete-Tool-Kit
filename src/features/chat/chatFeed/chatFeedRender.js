@@ -185,40 +185,36 @@ function executeRenderRiderCustomerChatFeed() {
         const isDone = !hasCatering && (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
         const completedAt = Number(t.completedAt) || 0;
         const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
-        const isNewMessageAfterDone = isDone && (completedAt <= 0 || lastMsgTime >= completedAt) && t.unreadForRider === true && t.lastMessage && !t.lastMessage.startsWith('You:');
+        const rawLastMsg = (t.lastMessage || '').trim();
+        const isCustomerMessage = Boolean(rawLastMsg && !rawLastMsg.startsWith('You:'));
 
-        if (isDone && !isNewMessageAfterDone) {
-            t.folder = 'done';
-            t.status = (t.status === 'cancelled') ? 'cancelled' : 'completed';
-            t.isUnread = false;
-            t.unreadForRider = false;
-            t.cateredByRiderId = null;
-            t.cateredByRiderName = null;
-            t.cateredBy = null;
-            return;
-        }
+        // Customer sent a new message after order completion:
+        // Automatically resurrect to active inbox (or catering if catered) and wipe stale completion fields!
+        const isNewMessageAfterDone = !hasCatering && (isDone || completedAt > 0) && isCustomerMessage && (completedAt <= 0 || lastMsgTime > completedAt || t.unreadForRider === true);
 
         if (isNewMessageAfterDone) {
             t.status = 'active';
+            t.completedAt = null;
+            t.completedByRiderId = null;
+            t.completedByRiderName = null;
+            t.cateredBy = null;
+            t.cateredByRiderId = null;
+            t.cateredByRiderName = null;
             const activeCaterer = getFastCaterer(t.customerName, t.custId);
             if (activeCaterer) {
                 t.folder = 'catering';
-                t.completedAt = null;
                 t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
                 t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
                 t.cateredBy = t.cateredByRiderName;
             } else {
                 t.folder = 'inbox';
-                t.cateredByRiderId = null;
-                t.cateredByRiderName = null;
-                t.cateredBy = null;
             }
             return;
         }
 
-        const isCompleted = !hasCatering && (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled');
-        if (isCompleted) {
+        if (isDone) {
             t.folder = 'done';
+            t.status = (t.status === 'cancelled') ? 'cancelled' : 'completed';
             t.isUnread = false;
             t.unreadForRider = false;
             t.cateredByRiderId = null;
@@ -239,34 +235,29 @@ function executeRenderRiderCustomerChatFeed() {
         } else if (liveRoster.length > 0) {
             const hadStaleCaterer = !!(t.cateredByRiderName || t.cateredByRiderId);
             const wasInCatering = (t.folder || '').toLowerCase() === 'catering';
+            const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || (t.folder || '').toLowerCase() === 'done';
+            const activeCaterer = (typeof getActiveRosterCaterer === 'function')
+                ? getActiveRosterCaterer(t.customerName, t.custId, t)
+                : null;
 
-            // Check if assigned rider is still actively Catering on duty
-            const assignedRider = liveRoster.find(m => {
-                const mId = (m.telegramId || m.id || "").toString().trim();
-                const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-                const tRId = (t.cateredByRiderId || "").toString().trim();
-                const tRName = (t.cateredByRiderName || t.cateredBy || "").toString().trim().toLowerCase();
-                return (tRId && mId && tRId === mId) || (tRName && mName && (tRName === mName || isRiderMatch(mName, tRName)));
-            });
-
-            if (assignedRider && assignedRider.status === 'Catering') {
-                // Assigned rider is on-duty Catering: RETAIN catering status!
+            if (isFinished && !activeCaterer) {
+                t.folder = 'done';
+                t.status = 'completed';
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+            } else if (activeCaterer) {
                 t.folder = 'catering';
                 t.status = 'active';
                 t.completedAt = null;
-            } else if (hadStaleCaterer || wasInCatering) {
-                const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-                if (isFinished) {
-                    t.folder = 'done';
-                    t.cateredByRiderId = null;
-                    t.cateredByRiderName = null;
-                    t.cateredBy = null;
-                } else {
-                    // Do NOT demote active catering orders to inbox on roster sync lag!
-                    t.folder = 'catering';
-                    t.status = 'active';
-                    t.completedAt = null;
-                }
+                t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                t.cateredBy = t.cateredByRiderName;
+            } else if (!isFinished && (hadStaleCaterer || wasInCatering)) {
+                // Do NOT demote active catering orders to inbox on roster sync lag!
+                t.folder = 'catering';
+                t.status = 'active';
+                t.completedAt = null;
             }
         }
     });

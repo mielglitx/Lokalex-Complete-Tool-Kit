@@ -323,20 +323,16 @@ export function isMyCustomerThread(t, cachedAuth = null) {
 }
 
 export function getActiveRosterCaterer(custName, custId, meta = {}) {
-    // Only respect recent explicit completion / cancellation (within 15s) to allow instant roster-driven completion.
-    // Old completed/done flags from past orders must NEVER prevent a new active catering assignment!
-    const completedAt = Number(meta?.completedAt) || 0;
-    const isRecentCompletion = completedAt > 0 && (Date.now() - completedAt < 15000);
-    if (isRecentCompletion && (meta?.folder === 'done' || meta?.status === 'completed' || meta?.status === 'cancelled')) {
-        return null;
-    }
-
     const liveRoster = globalState.rosterMembers || [];
     if (!liveRoster || liveRoster.length === 0) return null;
 
+    const threadFolder = (meta?.folder || '').toLowerCase();
+    const isExplicitDone = threadFolder === 'done' || meta?.status === 'completed' || meta?.status === 'done' || meta?.status === 'cancelled';
     const candidateNames = getThreadCustomerCandidates(meta, custName, custId);
 
     // 1. Direct match by candidate customer names or forcedCaters in live roster
+    // (This is authoritative: if a rider is actively catering this customer right now on the live roster,
+    // they take precedence even over previous order status).
     if (candidateNames.size > 0) {
         const matched = liveRoster.find(m => {
             if (m.status !== 'Catering') return false;
@@ -346,7 +342,9 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                 const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
                 for (const c of custs) {
                     for (const candidate of candidateNames) {
-                        if (c === candidate || isCustomerMatch(c, candidate)) return true;
+                        if (c === candidate || candidate.startsWith(c + ' ') || c.startsWith(candidate + ' ') || isCustomerMatch(c, candidate)) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -359,7 +357,9 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                     const cleanFName = (fName || '').toLowerCase().trim();
                     if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name') {
                         for (const candidate of candidateNames) {
-                            if (cleanFName === candidate || isCustomerMatch(fName, candidate)) return true;
+                            if (cleanFName === candidate || candidate.startsWith(cleanFName + ' ') || cleanFName.startsWith(candidate + ' ') || isCustomerMatch(fName, candidate)) {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -371,13 +371,18 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
         if (matched) return matched;
     }
 
-    // 2. Fallback: If thread has active catering fields (cateredByRiderId or cateredByRiderName)
-    // AND that assigned rider is currently 'Catering' on the roster
-    const threadFolder = (meta?.folder || '').toLowerCase();
-    const isExplicitCateringFolder = threadFolder === 'catering';
-    const isInboxOrDone = !isExplicitCateringFolder && (threadFolder === 'inbox' || (isRecentCompletion && (threadFolder === 'done' || meta?.status === 'completed' || meta?.status === 'done')));
+    // If this thread is explicitly completed, cancelled, or in done folder, and NOT currently assigned on the roster above,
+    // it is strictly NOT actively catered! Never allow stale cateredByRiderName to match past completed orders!
+    if (isExplicitDone) {
+        return null;
+    }
 
-    if ((isExplicitCateringFolder || meta?.cateredByRiderId || meta?.cateredByRiderName) && !isInboxOrDone) {
+    // 2. Fallback for active (non-done) threads: If thread has active catering fields (cateredByRiderId or cateredByRiderName)
+    // AND that assigned rider is currently 'Catering' on the roster
+    const isExplicitCateringFolder = threadFolder === 'catering';
+    const isInbox = threadFolder === 'inbox';
+
+    if ((isExplicitCateringFolder || meta?.cateredByRiderId || meta?.cateredByRiderName) && !isInbox) {
         const metaRiderId = (meta?.cateredByRiderId || "").toString().trim();
         const metaRiderName = (meta?.cateredByRiderName || meta?.cateredBy || "").toString().trim().toLowerCase();
 
@@ -396,11 +401,17 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                     const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase());
                     for (const c of custs) {
                         for (const cand of candidateNames) {
-                            if (c === cand || isCustomerMatch(c, cand)) return true;
+                            if (c === cand || cand.startsWith(c + ' ') || c.startsWith(cand + ' ') || isCustomerMatch(c, cand)) {
+                                return true;
+                            }
                         }
                     }
+                    // The rider has specific customers listed, and this thread did NOT match any of them!
+                    return false;
                 }
-                return true;
+                
+                // If the rider has no customerName yet specified, accept the match
+                return !m.customerName;
             });
             if (member) return member;
         }
