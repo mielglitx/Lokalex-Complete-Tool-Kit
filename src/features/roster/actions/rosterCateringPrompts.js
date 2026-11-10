@@ -336,6 +336,8 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         saveRosterCache();
         updateRosterUI();
 
+        let resolvedTargetChatId = overrideCustId || null;
+
         if (db && custName) {
             const cleanSearchName = custName.toLowerCase().trim();
             const applyChatCaterUpdate = (targetChatId) => {
@@ -418,13 +420,12 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 }
             };
 
-            const targetChatId = overrideCustId || (custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null) : null);
-            let resolvedTargetChatId = targetChatId;
-
-            if (targetChatId) {
-                applyChatCaterUpdate(targetChatId);
+            const directTargetId = overrideCustId || (custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null) : null);
+            if (directTargetId) {
+                resolvedTargetChatId = directTargetId;
+                applyChatCaterUpdate(directTargetId);
                 if (typeof window.triggerAutoMessageOnCater === 'function') {
-                    window.triggerAutoMessageOnCater(targetChatId, custName, myName);
+                    window.triggerAutoMessageOnCater(directTargetId, custName, myName);
                 }
             }
 
@@ -458,7 +459,7 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                     if (matchesFb || matchesMeta) {
                         if (!resolvedTargetChatId) resolvedTargetChatId = custId;
                         applyChatCaterUpdate(custId);
-                        if (typeof window.triggerAutoMessageOnCater === 'function' && custId !== targetChatId) {
+                        if (typeof window.triggerAutoMessageOnCater === 'function' && custId !== directTargetId) {
                             window.triggerAutoMessageOnCater(custId, custName, myName);
                         }
                     }

@@ -233,31 +233,49 @@ function executeRenderRiderCustomerChatFeed() {
             t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
             t.cateredBy = t.cateredByRiderName;
         } else if (liveRoster.length > 0) {
-            const hadStaleCaterer = !!(t.cateredByRiderName || t.cateredByRiderId);
             const wasInCatering = (t.folder || '').toLowerCase() === 'catering';
             const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || (t.folder || '').toLowerCase() === 'done';
             const activeCaterer = (typeof getActiveRosterCaterer === 'function')
                 ? getActiveRosterCaterer(t.customerName, t.custId, t)
                 : null;
 
-            if (isFinished && !activeCaterer) {
-                t.folder = 'done';
-                t.status = 'completed';
-                t.cateredByRiderId = null;
-                t.cateredByRiderName = null;
-                t.cateredBy = null;
-            } else if (activeCaterer) {
+            if (activeCaterer) {
                 t.folder = 'catering';
                 t.status = 'active';
                 t.completedAt = null;
                 t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
                 t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
                 t.cateredBy = t.cateredByRiderName;
-            } else if (!isFinished && (hadStaleCaterer || wasInCatering)) {
-                // Do NOT demote active catering orders to inbox on roster sync lag!
-                t.folder = 'catering';
-                t.status = 'active';
-                t.completedAt = null;
+            } else if (isFinished) {
+                t.folder = 'done';
+                t.status = 'completed';
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+            } else if (wasInCatering) {
+                // If thread was marked catering but nobody on roster is actively catering them:
+                const assignedRiderName = (t.cateredByRiderName || t.cateredBy || '').trim().toLowerCase();
+                const assignedRider = assignedRiderName ? liveRoster.find(m => {
+                    const mName = (m.riderName || m.name || '').trim().toLowerCase();
+                    return mName && (mName === assignedRiderName || (typeof isRiderMatch === 'function' && isRiderMatch(assignedRiderName, mName)));
+                }) : null;
+
+                if (assignedRider && assignedRider.status === 'Catering') {
+                    t.folder = 'catering';
+                    t.status = 'active';
+                    t.completedAt = null;
+                } else {
+                    t.cateredByRiderId = null;
+                    t.cateredByRiderName = null;
+                    t.cateredBy = null;
+                    if (isFinished || t.completedAt) {
+                        t.folder = 'done';
+                        t.status = 'completed';
+                    } else {
+                        t.folder = 'inbox';
+                        t.status = 'active';
+                    }
+                }
             }
         }
     });

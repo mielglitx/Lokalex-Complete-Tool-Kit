@@ -576,18 +576,8 @@ export function updateModernTabBadges() {
     let countFollowup = 0;
 
     threads.forEach(t => {
-        let folder = (t.folder || 'inbox').toLowerCase();
-        const isDoneStatus = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-        const completedAt = Number(t.completedAt) || 0;
-        const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
-        const rawLastMsg = (t.lastMessage || '').trim();
-        const isCustomerMsg = rawLastMsg && !rawLastMsg.startsWith('You:');
-        const isResurrected = (folder === 'done' || isDoneStatus) && (isCustomerMsg && (completedAt <= 0 || lastMsgTime > completedAt || t.unreadForRider === true));
-
-        if (isResurrected) {
-            folder = 'inbox';
-        }
-        const isDone = !isResurrected && (isDoneStatus || folder === 'done');
+        const folder = (t.folder || 'inbox').toLowerCase();
+        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || folder === 'done';
         if (folder === 'spam' || folder === 'other' || t.status === 'spam') return;
         if (folder === 'done' || isDone) return;
 
@@ -767,28 +757,8 @@ export function getModernFilteredThreads(customCategory = null) {
             t.isForcedCater = false;
         }
 
-        const completedAt = Number(t.completedAt) || 0;
-        const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
-        const rawLastMsg = (t.lastMessage || '').trim();
-        const isCustomerMsg = rawLastMsg && !rawLastMsg.startsWith('You:');
-        const isResurrected = !hasCatering && (
-            (isCustomerMsg && (completedAt <= 0 || lastMsgTime > completedAt || t.unreadForRider === true)) &&
-            isExplicitDone
-        );
-
-        if (isResurrected) {
-            t.folder = 'inbox';
-            t.status = 'active';
-            t.completedAt = null;
-            t.completedByRiderId = null;
-            t.completedByRiderName = null;
-            t.cateredBy = null;
-            t.cateredByRiderId = null;
-            t.cateredByRiderName = null;
-        }
-
         const curFolder = (t.folder || 'inbox').toLowerCase();
-        const isDone = !hasCatering && !isResurrected && (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || curFolder === 'done');
+        const isDone = !hasCatering && isExplicitDone;
 
         // Stale caterer sanitization: Only if thread is strictly in inbox or explicitly done without catering
         if (!hasCatering && (curFolder === 'inbox' || isDone)) {

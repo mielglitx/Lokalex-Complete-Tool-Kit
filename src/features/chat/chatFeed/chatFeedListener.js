@@ -428,7 +428,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         const completedAt = Number(meta.completedAt) || 0;
         const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
         const isCustomerIncomingMsg = Boolean(rawLastMsg && !rawLastMsg.startsWith('You:'));
-        const isNewMessageAfterDone = Boolean(isAlreadyDone && isCustomerIncomingMsg && (completedAt <= 0 || lastMsgTime > completedAt || meta.unreadForRider === true));
+        const isNewMessageAfterDone = Boolean(isAlreadyDone && isCustomerIncomingMsg && completedAt > 0 && lastMsgTime > (completedAt + 2000) && meta.unreadForRider === true);
 
         if (isAlreadyDone && isNewMessageAfterDone) {
             // Customer sent a new message after order completion: PERMANENTLY resurrect back to Inbox!

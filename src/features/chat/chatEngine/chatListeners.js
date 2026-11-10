@@ -1020,19 +1020,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                         if (isFromCustomer) {
                             existingThread.isUnread = true;
                             existingThread.unreadForRider = true;
-                            const folder = (existingThread.folder || '').toLowerCase();
-                            const activeCaterer = typeof getActiveRosterCaterer === 'function' ? getActiveRosterCaterer(existingThread.customerName, existingThread.custId || custId, existingThread) : null;
-                            const isCatered = Boolean(activeCaterer || folder === 'catering' || existingThread.cateredByRiderName || existingThread.cateredByRiderId || existingThread.cateredBy);
-                            if (!isCatered && (folder === 'done' || existingThread.status === 'completed' || existingThread.status === 'done' || existingThread.status === 'cancelled')) {
-                                existingThread.folder = 'inbox';
-                                existingThread.status = 'active';
-                                existingThread.completedAt = null;
-                                existingThread.completedByRiderId = null;
-                                existingThread.completedByRiderName = null;
-                                existingThread.cateredByRiderId = null;
-                                existingThread.cateredByRiderName = null;
-                                existingThread.cateredBy = null;
-                            }
                         }
                     }
                 }
@@ -1045,24 +1032,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 };
                 if (isFromCustomer) {
                     metaPatch.unreadForRider = true;
-                    const folder = (currentRiderChatMeta?.folder || '').toLowerCase();
-                    const activeCaterer = typeof getActiveRosterCaterer === 'function' ? getActiveRosterCaterer(currentRiderChatMeta?.customerName, custId, currentRiderChatMeta) : null;
-                    const isCatered = Boolean(activeCaterer || folder === 'catering' || currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy);
-                    if (!isCatered && (folder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done' || currentRiderChatMeta?.status === 'cancelled' || currentRiderChatMeta?.completedAt)) {
-                        metaPatch.folder = 'inbox';
-                        metaPatch.status = 'active';
-                        metaPatch.completedAt = null;
-                        metaPatch.completedByRiderId = null;
-                        metaPatch.completedByRiderName = null;
-                        metaPatch.cateredByRiderId = null;
-                        metaPatch.cateredByRiderName = null;
-                        metaPatch.cateredBy = null;
-                        if (currentRiderChatMeta) {
-                            currentRiderChatMeta.folder = 'inbox';
-                            currentRiderChatMeta.status = 'active';
-                            currentRiderChatMeta.completedAt = null;
-                        }
-                    }
                 }
                 db.ref(`customerChatMeta/${custId}`).update(metaPatch).catch(() => {});
                 db.ref(`customerChats/${custId}/metadata`).update(metaPatch).catch(() => {});
